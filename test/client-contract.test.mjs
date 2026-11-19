@@ -162,6 +162,7 @@ async function mountFloating(remote, hooks = {}, timers) {
   const client = await loadClient({ timers, react: {
     createElement(type, props, ...children) { return { type, props, children } },
     useEffect() {},
+    useLayoutEffect() {},
     useRef(initial) { return { current: initial } },
     useState(initial) { return [initial, () => {}] },
     useSyncExternalStore(_subscribe, get) { return get() },
@@ -176,7 +177,10 @@ async function mountFloating(remote, hooks = {}, timers) {
         if (entry.name === 'shell.overlay') {
           const props = entry.inject()
           floating = props.floating
-          render = () => Overlay(props)
+          render = () => {
+            const content = Overlay(props)
+            return content ? content.type(content.props) : null
+          }
         }
       } },
     }) },
@@ -255,9 +259,27 @@ test('account and quota mount independently of each other and of the cost estima
           items: { apiCost: false, account: kind === 'account', quota: kind === 'quota' } } }
       },
     })
-    const panes = render().children.flat()
-    assert.equal(panes.length, 1)
-    assert.equal(panes[0].props.key, kind)
+    const shell = render()
+    for (const panes of [shell.props.summary, shell.props.details]) {
+      assert.equal(panes.length, 1)
+      assert.equal(panes[0].props.key, kind)
+    }
+  }
+})
+
+test('the floating window exposes only its current view to accessibility tools', async () => {
+  const { render } = await mountFloating({
+    async floatingPreferences() {
+      return { ok: true, value: { enabled: true, position: null, items: { quota: true } } }
+    },
+  })
+  const shell = render()
+  for (const collapsed of [false, true]) {
+    const window = shell.type({ ...shell.props, collapsed })
+    const summary = window.children.find(node => node.props?.className?.endsWith(' codex-float-summary'))
+    const details = window.children.find(node => node.props?.className?.endsWith(' codex-float-details'))
+    assert.equal(summary.props['aria-hidden'], collapsed ? undefined : true)
+    assert.equal(details.props['aria-hidden'], collapsed ? true : undefined)
   }
 })
 
@@ -277,9 +299,9 @@ test('collapsed summaries expose compact labels, two quota values and a separate
   }, {
     useState(initial) { return [initial === undefined ? states.shift() : initial, () => {}] },
   })
-  const summaries = render().children.flat().map(pane => {
+  const summaries = render().props.summary.map(pane => {
     const [content] = pane.children
-    return descendants(content.type({ ...content.props, collapsed: true }))
+    return descendants(content.type(content.props))
   })
   const texts = nodes => nodes.filter(node => typeof node === 'string')
   assert.deepEqual(texts(summaries[0]), ['会话', '$0.058'])
@@ -325,15 +347,15 @@ for (const interruption of ['stream ended', 'stream stalled']) {
         await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))
       },
     }, {
-      useEffect(setup) { effect = setup },
+      useEffect(setup, dependencies) {
+        if (dependencies[1] === 'quota') effect = setup
+      },
       useState(initial) {
         return [initial ?? value, next => { value = typeof next === 'function' ? next(value) : next }]
       },
     }, timers)
 
-    const [pane] = render().children.flat()
-    const [quota] = pane.children
-    quota.type({ ...quota.props, collapsed: true })
+    render()
     const cleanup = effect()
     try {
       await nextTurn()
@@ -345,7 +367,8 @@ for (const interruption of ['stream ended', 'stream stalled']) {
       }
       assert.equal(value.status, 'stale')
       assert.equal(value.windows[0].remaining, 52)
-      assert.ok(descendants(quota.type({ ...quota.props, collapsed: true })).includes('上次'))
+      const [quota] = render().props.summary[0].children
+      assert.ok(descendants(quota.type(quota.props)).includes('上次'))
       fire(3000)
       await nextTurn()
       assert.equal(signals.length, 2)
@@ -370,16 +393,17 @@ test('account details and the collapsed summary use the same human-readable plan
       return [initial === undefined ? { kind: 'account', status: 'signed-in', plan } : initial, () => {}]
     },
   })
-  const [pane] = render().children.flat()
-  const [content] = pane.children
   for (const [raw, expected] of [
     ['prolite', 'Pro 100'], ['pro', 'Pro 200'], ['promax', 'Pro 500'],
     ['plus', 'Plus'], ['go', 'Go'], ['education', 'Edu'],
     ['future_tier', 'future_tier'], ['constructor', 'constructor'],
   ]) {
     plan = raw
-    assert.ok(descendants(content.type({ ...content.props, collapsed: false })).includes(expected), raw)
-    assert.deepEqual(content.type({ ...content.props, collapsed: true }).children, [expected], raw)
+    const { summary, details } = render().props
+    const [detail] = details[0].children
+    const [compact] = summary[0].children
+    assert.ok(descendants(detail.type(detail.props)).includes(expected), raw)
+    assert.deepEqual(compact.type(compact.props).children, [expected], raw)
   }
 })
 

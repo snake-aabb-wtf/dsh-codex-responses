@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
-  const { createElement: element, useEffect, useMemo, useRef, useState, useSyncExternalStore } = require('react')
+  const { createElement: element, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } = require('react')
   const { z } = require('zod')
   const packageName = 'dsh-codex-responses'
   const namespace = 'codexResponses'
@@ -216,14 +216,17 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   const floatingStyles = `
     .dsh-codex-float {
       position: fixed;
-      top: 78px;
+      top: var(--codex-float-y, 78px);
       right: 24px;
-      width: min(258px, calc(100vw - 16px));
-      max-height: calc(100vh - 16px);
+      width: max-content;
+      max-width: calc(100vw - 16px);
       display: grid;
       grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      transform: translate(var(--codex-float-shift-x, max(0px, calc(100% + 32px - 100vw))),
+        min(0px, calc(100vh - var(--codex-float-y, 78px) - 8px - 100%)));
       box-sizing: border-box;
-      overflow: auto;
+      overflow: hidden;
       color: var(--dsw-alias-label-primary, CanvasText);
       background: var(--dsw-alias-settings-card-fill, Canvas);
       border: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder);
@@ -235,25 +238,32 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       font-variant-numeric: tabular-nums;
       --codex-float-muted: var(--dsw-alias-label-secondary, GrayText);
     }
+    .dsh-codex-float[data-positioned] {
+      left: var(--codex-float-x); right: auto;
+      --codex-float-shift-x: min(0px, calc(100vw - var(--codex-float-x) - 8px - 100%));
+    }
     .dsh-codex-float .codex-float-toggle {
-      grid-area: 1 / 1; display: flex; align-items: center; gap: 7px; min-height: 36px;
+      position: absolute; grid-area: 1 / 1 / 2 / 2; z-index: 1; inset: 0 0 auto; height: 36px;
+      display: flex; align-items: center; gap: 7px;
       padding: 6px 12px; border: 0; color: inherit; font: inherit; font-weight: 620;
       background: color-mix(in srgb, var(--dsw-alias-link, Highlight) 8%, transparent);
       cursor: pointer; touch-action: none; user-select: none;
+      transition: background-color 120ms ease;
     }
     .dsh-codex-float .codex-float-toggle:hover { background: color-mix(in srgb, var(--dsw-alias-link, Highlight) 14%, transparent); }
     .dsh-codex-float .codex-float-toggle:active { cursor: grabbing; }
     .dsh-codex-float .codex-float-grip { color: var(--codex-float-muted); }
+    .dsh-codex-float .codex-float-title {
+      position: absolute; inset-inline-start: 29px; white-space: nowrap; transition: opacity 100ms ease 60ms;
+    }
     .dsh-codex-float .codex-float-cue { margin-inline-start: auto; min-inline-size: 14px; }
     .dsh-codex-float :focus-visible { outline: 2px solid var(--dsw-alias-link, Highlight); outline-offset: -2px; }
-    .dsh-codex-float .codex-float-content { grid-area: 2 / 1; min-width: 0; }
     .dsh-codex-float[data-collapsed] {
-      width: max-content; max-width: calc(100vw - 16px);
       border-radius: 20px; box-shadow: 0 5px 16px #0002, 0 1px 2px #0001;
     }
-    .dsh-codex-float[data-collapsed] .codex-float-title { display: none; }
+    .dsh-codex-float[data-collapsed] .codex-float-title { opacity: 0; transition: opacity 76ms ease; }
     .dsh-codex-float[data-collapsed] .codex-float-toggle {
-      border-radius: inherit; background: transparent; padding-inline: 11px; min-height: 36px;
+      height: 100%; border-radius: inherit; background: transparent; padding-inline: 11px;
     }
     .dsh-codex-float[data-collapsed] .codex-float-toggle:hover {
       background: color-mix(in srgb, var(--dsw-alias-link, Highlight) 7%, transparent);
@@ -265,13 +275,27 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       content: ''; width: 5px; height: 5px; margin-top: -3px;
       border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
     }
-    .dsh-codex-float[data-collapsed] .codex-float-content {
-      grid-area: 1 / 1; align-self: center; display: flex; flex-wrap: wrap; align-items: center;
-      gap: 3px 9px; margin-inline: 29px 32px; padding-block: 7px;
+    .dsh-codex-float .codex-float-view {
+      grid-area: 1 / 1; align-self: start; min-width: 0;
+      transition: opacity 84ms ease;
+    }
+    /* Both views size the same column. Only the active view sizes the row. */
+    .dsh-codex-float .codex-float-view[aria-hidden] { height: 0; opacity: 0; pointer-events: none; }
+    .dsh-codex-float .codex-float-details {
+      contain: inline-size; min-width: min(256px, calc(100vw - 18px));
+    }
+    .dsh-codex-float .codex-float-details::before { content: ''; display: block; height: 36px; }
+    .dsh-codex-float .codex-float-details:not([aria-hidden]) { transition: opacity 112ms ease 48ms; }
+    .dsh-codex-float .codex-float-details-body { max-height: calc(100vh - 54px); overflow: auto; }
+    .dsh-codex-float .codex-float-metrics {
+      min-height: 36px; box-sizing: border-box;
+      display: flex; flex-wrap: wrap; align-content: center; align-items: center;
+      gap: 3px 9px; padding: 7px 32px 7px 29px;
       pointer-events: none; user-select: none; font-size: 12px; line-height: 1.4;
     }
-    .dsh-codex-float[data-collapsed] .codex-float-pane { min-width: 0; }
-    .dsh-codex-float[data-collapsed] .codex-float-pane + .codex-float-pane {
+    .dsh-codex-float .codex-float-summary:not([aria-hidden]) { transition: opacity 96ms ease 64ms; }
+    .dsh-codex-float .codex-float-summary .codex-float-pane { min-width: 0; }
+    .dsh-codex-float .codex-float-summary .codex-float-pane + .codex-float-pane {
       border-inline-start: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder);
       padding-inline-start: 9px;
     }
@@ -288,9 +312,16 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       background: color-mix(in srgb, var(--codex-float-muted) 12%, transparent);
     }
     @media (max-width: 420px) {
-      .dsh-codex-float[data-collapsed] .codex-float-pane + .codex-float-pane { border-inline-start: 0; padding-inline-start: 0; }
+      .dsh-codex-float .codex-float-summary .codex-float-pane + .codex-float-pane { border-inline-start: 0; padding-inline-start: 0; }
     }
-    .dsh-codex-float:not([data-collapsed]) .codex-float-pane + .codex-float-pane { border-top: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder); }
+    .dsh-codex-float .codex-float-details .codex-float-pane + .codex-float-pane {
+      border-top: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dsh-codex-float :is(.codex-float-toggle, .codex-float-title, .codex-float-view),
+      .dsh-codex-float[data-collapsed] .codex-float-title,
+      .dsh-codex-float :is(.codex-float-summary, .codex-float-details):not([aria-hidden]) { transition: none; }
+    }
   `
   const costStyles = `
     .dsh-codex-float .codex-cost-pane { padding: 10px 12px; }
@@ -442,41 +473,82 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     if (!prefs?.enabled) return null
     const selected = floatingItems.filter(({ id }) => prefs.items[id])
     if (!selected.length) return null
-    return element(FloatingWindow, {
+    return element(FloatingContent, {
+      selected,
+      contentProps,
       position: prefs.position,
       busy,
       collapsed,
       onToggle: () => setCollapsed(value => !value),
       onMove: position => { void floating.save({ position }) },
-    }, selected.map(({ id, component }) => element('div', { key: id, className: 'codex-float-pane' },
-      element(component, { ...contentProps[id], collapsed }))))
+    })
   }
 
-  function FloatingWindow({ position, busy, collapsed, onToggle, onMove, children }) {
+  function FloatingContent({ selected, contentProps, ...windowProps }) {
+    const has = id => selected.some(item => item.id === id)
+    const paneProps = {
+      apiCost: useApiCost(contentProps.apiCost.cost, has('apiCost')),
+      account: { account: useSubscription(contentProps.account.observe, 'account', has('account')) },
+      quota: { quota: useSubscription(contentProps.quota.observe, 'quota', has('quota')) },
+    }
+    const view = collapsed => selected.map(({ id, component }) => element('div', { key: id, className: 'codex-float-pane' },
+      element(component, { ...paneProps[id], collapsed })))
+    return element(FloatingWindow, { ...windowProps, summary: view(true), details: view(false) })
+  }
+
+  const reducedMotion = '(prefers-reduced-motion: reduce)'
+  function floatingGeometry(node) {
+    const { left, top, height } = node.getBoundingClientRect()
+    return { left: `${left}px`, top: `${top}px`, height: `${height}px`,
+      borderRadius: window.getComputedStyle(node).borderRadius, right: 'auto', transform: 'none' }
+  }
+
+  function FloatingWindow({ position, busy, collapsed, onToggle, onMove, summary, details }) {
     const [preview, setPreview] = useState()
-    const [bounds, setBounds] = useState()
     const frame = useRef(null)
+    const summaryView = useRef(null)
+    const detailsView = useRef(null)
+    const previousGeometry = useRef(null)
+    const animation = useRef(null)
     const drag = useRef(null)
     // A released pointer can still generate a click on the captured button.
     const skipPointerClick = useRef(false)
 
-    useEffect(() => {
-      const measure = () => {
-        const rect = frame.current?.getBoundingClientRect()
-        if (rect) setBounds({ x: Math.max(8, window.innerWidth - rect.width - 8),
-          y: Math.max(8, window.innerHeight - rect.height - 8) })
+    const stopAnimation = () => animation.current?.cancel()
+    useLayoutEffect(() => {
+      summaryView.current.inert = !collapsed
+      detailsView.current.inert = collapsed
+      const from = previousGeometry.current
+      previousGeometry.current = null
+      if (!from || window.matchMedia(reducedMotion).matches) return
+      const node = frame.current
+      const flight = node.animate([from, floatingGeometry(node)], {
+        duration: collapsed ? 180 : 220,
+        easing: collapsed ? 'cubic-bezier(.28, .1, .34, 1)' : 'cubic-bezier(.22, .65, .28, 1)',
+      })
+      animation.current = flight
+      return () => {
+        flight.cancel()
+        animation.current = null
       }
-      const observer = new ResizeObserver(measure)
-      if (frame.current) observer.observe(frame.current)
-      window.addEventListener('resize', measure)
-      measure()
-      return () => { observer.disconnect(); window.removeEventListener('resize', measure) }
+    }, [collapsed])
+
+    useEffect(() => {
+      const preference = window.matchMedia(reducedMotion)
+      window.addEventListener('resize', stopAnimation)
+      preference.addEventListener('change', stopAnimation)
+      return () => {
+        window.removeEventListener('resize', stopAnimation)
+        preference.removeEventListener('change', stopAnimation)
+      }
     }, [])
 
-    const clamp = point => ({ x: Math.min(bounds?.x ?? window.innerWidth - 16, Math.max(8, point.x)),
-      y: Math.min(bounds?.y ?? window.innerHeight - 16, Math.max(8, point.y)) })
+    const clamp = point => {
+      const view = collapsed ? summaryView.current : detailsView.current
+      return { x: Math.max(8, Math.min(point.x, window.innerWidth - (view?.offsetWidth ?? 0) - 10)),
+        y: Math.max(8, Math.min(point.y, window.innerHeight - (view?.offsetHeight ?? 0) - 10)) }
+    }
     const point = preview ?? position
-    const located = point ? clamp(point) : undefined
     const dragPoint = (event, handle) => clamp({ x: handle.left + event.clientX - handle.x,
       y: handle.top + event.clientY - handle.y })
     const crossedThreshold = (event, handle) => Math.hypot(event.clientX - handle.x, event.clientY - handle.y) >= 5
@@ -491,7 +563,10 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       const handle = drag.current
       if (handle?.id !== event.pointerId) return
       handle.moved ||= crossedThreshold(event, handle)
-      if (handle.moved && handle.movable) setPreview(dragPoint(event, handle))
+      if (handle.moved && handle.movable) {
+        stopAnimation()
+        setPreview(dragPoint(event, handle))
+      }
     }
     const finishDrag = (event, commit) => {
       const handle = drag.current
@@ -500,13 +575,18 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       const moved = handle.moved || crossedThreshold(event, handle)
       skipPointerClick.current = moved || !commit
       if (commit && moved && handle.movable) {
+        stopAnimation()
         const point = dragPoint(event, handle)
         if (point.x !== handle.left || point.y !== handle.top) onMove(point)
       }
       setPreview(undefined)
     }
     const toggleFromHeader = event => {
-      if (event.detail === 0 || !skipPointerClick.current) onToggle()
+      if (event.detail === 0 || !skipPointerClick.current) {
+        const node = frame.current
+        if (node?.animate && !window.matchMedia(reducedMotion).matches) previousGeometry.current = floatingGeometry(node)
+        onToggle()
+      }
       skipPointerClick.current = false
     }
     const moveByKey = event => {
@@ -514,12 +594,14 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       if (!step || busy) return
       event.preventDefault()
       const { left, top } = frame.current.getBoundingClientRect()
+      stopAnimation()
       onMove(clamp({ x: left + step[0], y: top + step[1] }))
     }
 
     return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': 'ChatGPT Subscription',
-      'data-collapsed': collapsed || undefined, style: located ? { left: located.x, top: located.y, right: 'auto' } : undefined },
-      element('style', null, floatingStyles + subscriptionStyles),
+      'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined,
+      style: point ? { '--codex-float-x': `${Math.max(8, point.x)}px`, '--codex-float-y': `${Math.max(8, point.y)}px` } : undefined },
+      element('style', null, floatingStyles + costStyles + subscriptionStyles),
       element('button', { type: 'button', className: 'codex-float-toggle',
         'aria-label': collapsed ? '展开悬浮窗' : '折叠悬浮窗',
         'aria-expanded': !collapsed, 'aria-description': '按方向键移动悬浮窗',
@@ -527,10 +609,13 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
         onKeyDown: moveByKey, onPointerDown: startDrag, onPointerMove: move, onPointerUp: e => finishDrag(e, true),
         onPointerCancel: e => finishDrag(e, false), onLostPointerCapture: e => finishDrag(e, false) },
         element('span', { className: 'codex-float-grip', 'aria-hidden': 'true' }, '⠿'),
-        element('span', { className: 'codex-float-title' }, 'ChatGPT Subscription'),
+        element('span', { className: 'codex-float-title', 'aria-hidden': 'true' }, 'ChatGPT Subscription'),
         element('span', { className: 'codex-float-cue', 'aria-hidden': 'true' }, collapsed ? null : '−'),
       ),
-      element('div', { className: 'codex-float-content' }, children),
+      element('div', { className: 'codex-float-view codex-float-summary', 'aria-hidden': !collapsed || undefined, ref: summaryView },
+        element('div', { className: 'codex-float-metrics' }, summary)),
+      element('div', { className: 'codex-float-view codex-float-details', 'aria-hidden': collapsed || undefined, ref: detailsView },
+        element('div', { className: 'codex-float-details-body' }, details)),
     )
   }
 
@@ -541,12 +626,13 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     )
   }
 
-  function ApiCostPane({ cost, collapsed }) {
+  function useApiCost(cost, enabled) {
     const sessionId = useSyncExternalStore(cost.subscribe, cost.get)
     const [value, setValue] = useState()
     const [error, setError] = useState(false)
 
     useEffect(() => {
+      if (!enabled) { setValue(undefined); return }
       const controller = new AbortController()
       let retry
       async function follow() {
@@ -565,8 +651,11 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       }
       void follow()
       return () => { controller.abort(); clearTimeout(retry) }
-    }, [cost, sessionId])
+    }, [cost, enabled, sessionId])
+    return { sessionId, value, error }
+  }
 
+  function ApiCostPane({ sessionId, value, error, collapsed }) {
     const current = value?.sessionId === sessionId ? value.current : null
     const currentText = value?.sessionId === sessionId && value.currentUnavailable ? '用量暂不可读' : displayAmount(current)
     if (collapsed) return summaryMetric('会话', currentText)
@@ -580,7 +669,6 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       ].filter(Boolean).join(' · ')
 
     return element('section', { className: 'codex-cost-pane' },
-      element('style', null, costStyles),
       element('h3', { className: 'codex-cost-title' }, 'API 标价估算'),
       element('dl', null,
         element('div', { className: 'codex-cost-row' },
@@ -594,9 +682,10 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   const quotaSilenceMs = 90_000
   const subscriptionRetryMs = 3000
 
-  function useSubscription(observe, kind) {
+  function useSubscription(observe, kind, enabled = true) {
     const [value, setValue] = useState()
     useEffect(() => {
+      if (!enabled) { setValue(undefined); return }
       let stopped = false
       let controller
       let silence
@@ -636,7 +725,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
         clearTimeout(silence)
         clearTimeout(retry)
       }
-    }, [observe, kind])
+    }, [observe, kind, enabled])
     return value
   }
 
@@ -718,14 +807,12 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     )
   }
 
-  function AccountPane({ observe, collapsed }) {
-    const account = useSubscription(observe, 'account')
+  function AccountPane({ account, collapsed }) {
     if (collapsed) return element('span', { className: 'codex-summary-plan' }, accountPlan(account) || accountStatusText(account))
     return accountDetails(account)
   }
 
-  function QuotaPane({ observe, collapsed }) {
-    const quota = useSubscription(observe, 'quota')
+  function QuotaPane({ quota, collapsed }) {
     if (!collapsed) return quotaDetails(quota)
     const windows = quota?.windows ?? []
     const stale = quota?.status === 'stale'
