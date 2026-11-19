@@ -9,7 +9,8 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     catalog: z.strictObject({ source: z.enum(['upstream', 'cached', 'bundled', 'unavailable']), count: z.number().int().nonnegative() }).optional() })
   const deviceSchema = z.strictObject({ type: z.literal('device'), url: z.literal(deviceURL), code: z.string() })
   const loginSchema = z.discriminatedUnion('type', [statusSchema, deviceSchema])
-  const position = z.strictObject({ x: z.number().min(0).max(100_000), y: z.number().min(0).max(100_000) }).nullable()
+  const position = z.strictObject({ x: z.number().min(0).max(100_000), y: z.number().min(0).max(100_000),
+    edge: z.enum(['left', 'right']).optional() }).nullable()
   const items = z.strictObject({ apiCost: z.boolean(), account: z.boolean(), quota: z.boolean() })
   const preferences = z.strictObject({ enabled: z.boolean(), position, items })
   const preferencePatch = preferences.partial().extend({ items: items.partial().optional() })
@@ -240,8 +241,11 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     }
     .dsh-codex-float[data-positioned] {
       left: var(--codex-float-x); right: auto;
-      --codex-float-shift-x: min(0px, calc(100vw - var(--codex-float-x) - 8px - 100%));
+      --codex-float-shift-x: min(0px, calc(100vw - var(--codex-float-x) - var(--codex-float-margin, 8px) - 100%));
     }
+    .dsh-codex-float[data-edge] { --codex-float-shift-x: 0px; }
+    .dsh-codex-float[data-edge='left'] { left: 0; right: auto; }
+    .dsh-codex-float[data-edge='right'] { left: auto; right: 0; }
     .dsh-codex-float .codex-float-toggle {
       position: absolute; grid-area: 1 / 1 / 2 / 2; z-index: 1; inset: 0 0 auto; height: 36px;
       display: flex; align-items: center; gap: 7px;
@@ -317,10 +321,36 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     .dsh-codex-float .codex-float-details .codex-float-pane + .codex-float-pane {
       border-top: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder);
     }
+    .dsh-codex-float .codex-float-portrait { contain: inline-size; }
+    .dsh-codex-float[data-portrait] .codex-float-summary { contain: inline-size; }
+    .dsh-codex-float[data-portrait] .codex-float-details { min-width: 0; }
+    .dsh-codex-float[data-portrait] .codex-float-portrait { min-width: min(82px, calc(100vw - 18px)); }
+    .dsh-codex-float .codex-float-portrait:not([aria-hidden]) { transition: opacity 96ms ease 64ms; }
+    .dsh-codex-float .codex-float-portrait-metrics {
+      box-sizing: border-box; width: 82px; min-height: min(104px, calc(100vh - 18px));
+      max-height: calc(100vh - 18px); padding: 26px 6px;
+      display: flex; flex-direction: column; justify-content: center; gap: 6px;
+      text-align: center; font-size: 12px; line-height: 1.4; overflow: hidden;
+      pointer-events: none; user-select: none;
+    }
+    .dsh-codex-float[data-portrait='right'] .codex-float-portrait-metrics { margin-inline-start: auto; }
+    .dsh-codex-float .codex-float-portrait .codex-float-pane + .codex-float-pane {
+      border-top: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder); padding-top: 6px;
+    }
+    .dsh-codex-float .codex-float-portrait .codex-summary-metric {
+      flex-direction: column; align-items: center; gap: 0; white-space: normal; overflow-wrap: anywhere;
+    }
+    .dsh-codex-float .codex-float-portrait .codex-quota-summary { display: grid; justify-items: center; gap: 4px; }
+    .dsh-codex-float[data-portrait] .codex-float-toggle {
+      flex-direction: column; justify-content: space-between; padding: 6px 0 9px;
+    }
+    .dsh-codex-float[data-portrait] .codex-float-cue { margin-inline-start: 0; }
+    .dsh-codex-float[data-portrait='left'] .codex-float-cue::before { margin: 0 2px 0 0; transform: rotate(-45deg); }
+    .dsh-codex-float[data-portrait='right'] .codex-float-cue::before { margin: 0 0 0 2px; transform: rotate(135deg); }
     @media (prefers-reduced-motion: reduce) {
       .dsh-codex-float :is(.codex-float-toggle, .codex-float-title, .codex-float-view),
       .dsh-codex-float[data-collapsed] .codex-float-title,
-      .dsh-codex-float :is(.codex-float-summary, .codex-float-details):not([aria-hidden]) { transition: none; }
+      .dsh-codex-float :is(.codex-float-summary, .codex-float-portrait, .codex-float-details):not([aria-hidden]) { transition: none; }
     }
   `
   const costStyles = `
@@ -497,9 +527,11 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   }
 
   const reducedMotion = '(prefers-reduced-motion: reduce)'
+  const dockDistance = 24
+  const dockEasing = 'cubic-bezier(.22, .55, .42, 1)'
   function floatingGeometry(node) {
-    const { left, top, height } = node.getBoundingClientRect()
-    return { left: `${left}px`, top: `${top}px`, height: `${height}px`,
+    const { left, top, width, height } = node.getBoundingClientRect()
+    return { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
       borderRadius: window.getComputedStyle(node).borderRadius, right: 'auto', transform: 'none' }
   }
 
@@ -507,31 +539,44 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     const [preview, setPreview] = useState()
     const frame = useRef(null)
     const summaryView = useRef(null)
+    const portraitView = useRef(null)
     const detailsView = useRef(null)
-    const previousGeometry = useRef(null)
+    const requestedMotion = useRef(null)
     const animation = useRef(null)
     const drag = useRef(null)
     // A released pointer can still generate a click on the captured button.
     const skipPointerClick = useRef(false)
+    const portrait = collapsed ? position?.edge : undefined
+    const horizontal = collapsed && !portrait
 
-    const stopAnimation = () => animation.current?.cancel()
-    useLayoutEffect(() => {
-      summaryView.current.inert = !collapsed
-      detailsView.current.inert = collapsed
-      const from = previousGeometry.current
-      previousGeometry.current = null
-      if (!from || window.matchMedia(reducedMotion).matches) return
+    const stopAnimation = () => {
+      animation.current?.cancel()
+      animation.current = null
+    }
+    const requestMotion = (duration, easing) => {
       const node = frame.current
-      const flight = node.animate([from, floatingGeometry(node)], {
-        duration: collapsed ? 180 : 220,
-        easing: collapsed ? 'cubic-bezier(.28, .1, .34, 1)' : 'cubic-bezier(.22, .65, .28, 1)',
-      })
-      animation.current = flight
-      return () => {
-        flight.cancel()
-        animation.current = null
+      if (node?.animate && !window.matchMedia(reducedMotion).matches) {
+        requestedMotion.current = { from: floatingGeometry(node), duration, easing }
       }
-    }, [collapsed])
+    }
+    useLayoutEffect(() => {
+      summaryView.current.inert = !horizontal
+      portraitView.current.inert = !portrait
+      detailsView.current.inert = collapsed
+    }, [collapsed, horizontal, portrait])
+
+    useLayoutEffect(() => {
+      if (preview || !requestedMotion.current) return
+      const { from, duration, easing } = requestedMotion.current
+      requestedMotion.current = null
+      stopAnimation()
+      if (window.matchMedia(reducedMotion).matches) return
+      const node = frame.current
+      const to = floatingGeometry(node)
+      if (from.left !== to.left || from.top !== to.top || from.width !== to.width || from.height !== to.height || from.borderRadius !== to.borderRadius) {
+        animation.current = node.animate([from, to], { duration, easing })
+      }
+    }, [collapsed, position, preview])
 
     useEffect(() => {
       const preference = window.matchMedia(reducedMotion)
@@ -540,16 +585,20 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       return () => {
         window.removeEventListener('resize', stopAnimation)
         preference.removeEventListener('change', stopAnimation)
+        stopAnimation()
       }
     }, [])
 
-    const clamp = point => {
-      const view = collapsed ? summaryView.current : detailsView.current
-      return { x: Math.max(8, Math.min(point.x, window.innerWidth - (view?.offsetWidth ?? 0) - 10)),
-        y: Math.max(8, Math.min(point.y, window.innerHeight - (view?.offsetHeight ?? 0) - 10)) }
+    const limits = () => {
+      const view = portrait ? portraitView.current : collapsed ? summaryView.current : detailsView.current
+      const width = frame.current.getBoundingClientRect().width ?? (view?.offsetWidth ?? 0) + 2
+      return { right: Math.max(0, window.innerWidth - width), bottom: window.innerHeight - (view?.offsetHeight ?? 0) - 10 }
     }
+    const clamp = (point, bounds, margin = 8) => ({ x: Math.max(margin, Math.min(point.x, bounds.right - margin)),
+      y: Math.max(8, Math.min(point.y, bounds.bottom)) })
     const point = preview ?? position
-    const dragPoint = (event, handle) => clamp({ x: handle.left + event.clientX - handle.x,
+    const dragMargin = collapsed || position?.edge ? 0 : 8
+    const dragPoint = (event, handle) => ({ x: handle.left + event.clientX - handle.x,
       y: handle.top + event.clientY - handle.y })
     const crossedThreshold = (event, handle) => Math.hypot(event.clientX - handle.x, event.clientY - handle.y) >= 5
     const startDrag = event => {
@@ -565,7 +614,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       handle.moved ||= crossedThreshold(event, handle)
       if (handle.moved && handle.movable) {
         stopAnimation()
-        setPreview(dragPoint(event, handle))
+        setPreview(clamp(dragPoint(event, handle), limits(), dragMargin))
       }
     }
     const finishDrag = (event, commit) => {
@@ -575,16 +624,24 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       const moved = handle.moved || crossedThreshold(event, handle)
       skipPointerClick.current = moved || !commit
       if (commit && moved && handle.movable) {
+        const bounds = limits()
+        const released = clamp(dragPoint(event, handle), bounds, dragMargin)
+        // Leave space for free placement even when the capsule is nearly as wide as the window.
+        const reach = Math.min(dockDistance, bounds.right / 3)
+        const edge = (collapsed || position?.edge === 'left') && released.x <= reach ? 'left'
+          : (collapsed || position?.edge === 'right') && bounds.right - released.x <= reach ? 'right' : undefined
+        const destination = edge ? { x: edge === 'left' ? 0 : bounds.right, y: released.y, edge }
+          : clamp(released, bounds)
+        const changed = destination.x !== handle.left || destination.y !== handle.top || edge !== position?.edge
+        if ((edge || portrait) && (preview || changed)) requestMotion(160, dockEasing)
         stopAnimation()
-        const point = dragPoint(event, handle)
-        if (point.x !== handle.left || point.y !== handle.top) onMove(point)
+        if (changed) onMove(destination)
       }
       setPreview(undefined)
     }
     const toggleFromHeader = event => {
       if (event.detail === 0 || !skipPointerClick.current) {
-        const node = frame.current
-        if (node?.animate && !window.matchMedia(reducedMotion).matches) previousGeometry.current = floatingGeometry(node)
+        requestMotion(collapsed ? 220 : 180, collapsed ? 'cubic-bezier(.22, .65, .28, 1)' : 'cubic-bezier(.28, .1, .34, 1)')
         onToggle()
       }
       skipPointerClick.current = false
@@ -593,14 +650,20 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       const step = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[event.key]
       if (!step || busy) return
       event.preventDefault()
+      const edge = position?.edge
+      if ((edge === 'left' && step[0] < 0) || (edge === 'right' && step[0] > 0)) return
       const { left, top } = frame.current.getBoundingClientRect()
+      const destination = clamp({ x: left + step[0], y: top + step[1] }, limits())
+      if (portrait && step[0]) requestMotion(160, dockEasing)
       stopAnimation()
-      onMove(clamp({ x: left + step[0], y: top + step[1] }))
+      onMove(edge && !step[0] ? { x: position.x, y: destination.y, edge } : destination)
     }
 
     return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': 'ChatGPT Subscription',
-      'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined,
-      style: point ? { '--codex-float-x': `${Math.max(8, point.x)}px`, '--codex-float-y': `${Math.max(8, point.y)}px` } : undefined },
+      'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined, 'data-edge': preview ? undefined : position?.edge,
+      'data-portrait': portrait,
+      style: point ? { '--codex-float-x': `${Math.max(preview ? dragMargin : 8, point.x)}px`,
+        '--codex-float-y': `${Math.max(8, point.y)}px`, '--codex-float-margin': preview ? `${dragMargin}px` : undefined } : undefined },
       element('style', null, floatingStyles + costStyles + subscriptionStyles),
       element('button', { type: 'button', className: 'codex-float-toggle',
         'aria-label': collapsed ? '展开悬浮窗' : '折叠悬浮窗',
@@ -612,8 +675,10 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
         element('span', { className: 'codex-float-title', 'aria-hidden': 'true' }, 'ChatGPT Subscription'),
         element('span', { className: 'codex-float-cue', 'aria-hidden': 'true' }, collapsed ? null : '−'),
       ),
-      element('div', { className: 'codex-float-view codex-float-summary', 'aria-hidden': !collapsed || undefined, ref: summaryView },
+      element('div', { className: 'codex-float-view codex-float-summary', 'aria-hidden': !horizontal || undefined, ref: summaryView },
         element('div', { className: 'codex-float-metrics' }, summary)),
+      element('div', { className: 'codex-float-view codex-float-portrait', 'aria-hidden': !portrait || undefined, ref: portraitView },
+        element('div', { className: 'codex-float-portrait-metrics' }, summary)),
       element('div', { className: 'codex-float-view codex-float-details', 'aria-hidden': collapsed || undefined, ref: detailsView },
         element('div', { className: 'codex-float-details-body' }, details)),
     )

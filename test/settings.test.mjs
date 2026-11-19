@@ -106,6 +106,22 @@ test('the settings subscription remains available with the floating window off a
   assert.equal((await observing.next()).done, true)
 })
 
+test('floating preferences restore an edge through storage and clear it on move or reset', async () => {
+  let stored = { enabled: true, position: { x: 32, y: 51 } }
+  const open = () => createFloatingPreferences({ readPreferences: () => stored, writePreferences: next => { stored = next } })
+  const floating = open()
+  assert.deepEqual((await floating.read()).position, { x: 32, y: 51 })
+  for (const edge of ['left', 'right']) {
+    const position = { x: edge === 'left' ? 0 : 740, y: 51, edge }
+    await floating.update({ position })
+    assert.deepEqual((await open().read()).position, position)
+  }
+  assert.deepEqual((await floating.update({ position: { x: 50, y: 80 } })).position, { x: 50, y: 80 })
+  assert.equal((await floating.update({ position: null })).position, null)
+  stored = { enabled: true, position: { x: 50, y: 80, edge: 'top' } }
+  assert.deepEqual((await open().read()).position, { x: 50, y: 80 })
+})
+
 test('failed login drops all upstream details', async () => {
   const settings = createSettings({ async begin() { throw new Error('synthetic-secret') } })
   await assert.rejects(settings.login(owner).next(), error => error.code === 'codex-responses/login-failed'

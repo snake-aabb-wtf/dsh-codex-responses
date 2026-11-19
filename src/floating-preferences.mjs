@@ -2,9 +2,10 @@ const coordinate = value => typeof value === 'number' && Number.isFinite(value) 
 
 function normalize(value) {
   const point = value?.position
+  const edge = point?.edge === 'left' || point?.edge === 'right' ? { edge: point.edge } : {}
   return Object.freeze({
     enabled: value?.enabled === true,
-    position: coordinate(point?.x) && coordinate(point?.y) ? Object.freeze({ x: point.x, y: point.y }) : null,
+    position: coordinate(point?.x) && coordinate(point?.y) ? Object.freeze({ x: point.x, y: point.y, ...edge }) : null,
     // Older versions only stored the window switch and position.
     items: Object.freeze({
       apiCost: value?.items?.apiCost !== false,

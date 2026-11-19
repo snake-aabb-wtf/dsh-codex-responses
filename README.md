@@ -6,7 +6,7 @@
 
 ## 安装与登录（Windows Desktop）
 
-1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.4.tgz`。
+1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.5.tgz`。
 2. 在 Desktop 的 **插件 → 安装插件** 中选择本地 `.tgz`，或用 Desktop 自带的 CLI 运行 `dsh plugin --profile desktop add <tgz的绝对路径>`。
 3. 打开 **设置 → ChatGPT Codex**，点 **使用设备码登录**。复制设备码，点 **打开 OpenAI 验证页面**，在浏览器中输入设备码并授权。
 4. 在会话的模型选择器中，从 **ChatGPT Codex** 分组选择模型和推理档位。
@@ -30,6 +30,8 @@
 - **API 标价估算**按模型的 token 用量和 OpenAI Standard API 标价，计算当前会话和此桌面配置下的累计金额。计入范围为 ChatGPT Codex 订阅请求，分叉继承的用量归入原会话。出现未计价请求或缺失记录时，金额显示为已计价小计。插件自动同步并缓存费率。[OpenAI Standard API 标价](https://developers.openai.com/api/docs/pricing)
 
 点击标题栏折叠，点击折叠后的状态条展开，拖动标题栏移动窗口。设置页可以重置位置。关闭悬浮窗或升级插件时会保留勾选和位置。
+
+将折叠胶囊拖到左边缘或右边缘附近松手，它会滑到窗边并切换为竖排。点击竖胶囊向窗内展开详情，拖离窗边再松手即可恢复横排。
 
 ## 凭据与卸载
 

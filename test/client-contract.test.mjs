@@ -35,6 +35,14 @@ test('client bundle mounts the same strict Remote contracts as the Host', async 
     assert.deepEqual(Array.from(descriptor.parameters, param => [param.wire, z.toJSONSchema(param.codec.create())]),
       host.parameters.map(param => [param.wire, z.toJSONSchema(param.codec.create())]))
   }
+  const floating = mounted.descriptors.find(descriptor => descriptor.method === 'floatingPreferences')
+  const preferences = { enabled: true, items: { apiCost: true, account: false, quota: false }, position: { x: 0, y: 20 } }
+  assert.deepEqual(floating.result.create().parse(preferences), preferences)
+  for (const edge of ['left', 'right']) {
+    const docked = { ...preferences, position: { ...preferences.position, edge } }
+    assert.deepEqual(floating.result.create().parse(docked), docked)
+  }
+  assert.equal(floating.result.create().safeParse({ ...preferences, position: { ...preferences.position, edge: 'top' } }).success, false)
 })
 
 test('Codex registers only a top-level Settings section once status access is granted', async () => {
@@ -251,6 +259,29 @@ test('releasing a drag saves the final coordinates without an intermediate point
   assert.equal(moved?.y, 100)
 })
 
+test('releasing the capsule near a side saves its edge and vertical position', async () => {
+  for (const [position, releaseLeft, collapsed, expected] of [
+    [{ x: 100, y: 40 }, 24, true, { x: 0, y: 55, edge: 'left' }],
+    [{ x: 300, y: 40 }, 726, true, { x: 750, y: 55, edge: 'right' }],
+    [{ x: 0, y: 40, edge: 'left' }, 25, true, { x: 25, y: 55 }],
+    [{ x: 0, y: 40, edge: 'left' }, 0, false, { x: 0, y: 55, edge: 'left' }],
+    [{ x: 100, y: 40 }, 15, false, { x: 15, y: 55 }],
+  ]) {
+    const { render } = await mountFloating({
+      async floatingPreferences() { return { ok: true, value: { enabled: true, position, items: { apiCost: true } } } },
+    })
+    const shell = render()
+    let moved
+    const frame = shell.type({ ...shell.props, collapsed, onMove: point => { moved = { ...point } } })
+    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width: 250 }) }
+    const handle = frame.children.find(node => node.props?.onPointerDown).props
+    const pointer = { button: 0, pointerId: 1, clientX: position.x + 15, clientY: 50, currentTarget: { setPointerCapture() {} } }
+    handle.onPointerDown(pointer)
+    handle.onPointerUp({ ...pointer, clientX: releaseLeft + 15, clientY: 65 })
+    assert.deepEqual(moved, expected)
+  }
+})
+
 test('account and quota mount independently of each other and of the cost estimator', async () => {
   for (const kind of ['account', 'quota']) {
     const { render } = await mountFloating({
@@ -274,11 +305,15 @@ test('the floating window exposes only its current view to accessibility tools',
     },
   })
   const shell = render()
-  for (const collapsed of [false, true]) {
-    const window = shell.type({ ...shell.props, collapsed })
+  for (const [collapsed, edge] of [[false, undefined], [true, undefined], [false, 'left'], [true, 'left'], [true, 'right']]) {
+    const position = edge ? { x: 0, y: 20, edge } : null
+    const window = shell.type({ ...shell.props, collapsed, position })
     const summary = window.children.find(node => node.props?.className?.endsWith(' codex-float-summary'))
+    const portrait = window.children.find(node => node.props?.className?.endsWith(' codex-float-portrait'))
     const details = window.children.find(node => node.props?.className?.endsWith(' codex-float-details'))
-    assert.equal(summary.props['aria-hidden'], collapsed ? undefined : true)
+    assert.equal(window.props['data-portrait'], collapsed ? edge : undefined)
+    assert.equal(summary.props['aria-hidden'], collapsed && !edge ? undefined : true)
+    assert.equal(portrait?.props['aria-hidden'], collapsed && edge ? undefined : true)
     assert.equal(details.props['aria-hidden'], collapsed ? true : undefined)
   }
 })
