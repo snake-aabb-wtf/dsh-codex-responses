@@ -1,51 +1,43 @@
 # DSH Codex Responses
 
-在 DeepSeek Harness Desktop `0.2.2-rc.3` 中使用 ChatGPT 订阅下的 Codex 模型。插件管理设备码登录、凭据和令牌刷新；DSH 继续管理对话、审批和执行工具。无需 Codex CLI、Codex App Server 或 API key；不支持 SIWC、浏览器回调登录、共享或远程部署。
+在 DeepSeek Harness Desktop `0.2.2-rc.3` 中使用 ChatGPT 订阅的 Codex 模型。插件负责设备码登录、OAuth 刷新和模型目录，DSH 负责对话、审批和工具执行。
 
 ## 安装与登录（Windows Desktop）
 
-1. 在本目录运行 `npm pack` 生成 `dsh-codex-responses-0.5.2.tgz`。不必先安装依赖或运行构建脚本。源码入口与客户端 bundle 已包含在包中。
-2. 通过 Desktop 的 **插件 → 安装插件** 安装本地 `.tgz`，或用 Desktop 自带的 CLI：`dsh plugin --profile desktop add <tgz的绝对路径>`。若安装界面提示需要重新加载，请先保存正在进行的工作。
-3. 打开 **设置 → ChatGPT Codex**，点 **使用设备码登录**。复制面板中的一次性设备码，点 **打开 OpenAI 验证页面**，在浏览器中粘贴并授权。只确认自己发起的登录，不分享设备码或令牌。
-4. 登录完成后，在会话的模型选择器里选择 **ChatGPT Codex** 下的模型。插件用当前登录向 Codex 拉取模型目录，正常时约每五分钟更新一次；目录中可见不保证每次推理都会被套餐或组织策略接受。插件不改变默认模型，也不转用 API 账单或其他账号。
+1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.2.tgz`。
+2. 在 Desktop 的 **插件 → 安装插件** 中选择本地 `.tgz`，或用 Desktop 自带的 CLI 运行 `dsh plugin --profile desktop add <tgz的绝对路径>`。
+3. 打开 **设置 → ChatGPT Codex**，点 **使用设备码登录**。复制设备码，点 **打开 OpenAI 验证页面**，在浏览器中输入设备码并授权。
+4. 在会话的模型选择器中，从 **ChatGPT Codex** 分组选择模型和推理档位。
 
-首次拉取遇到网络或服务临时故障时，用 pi-ai 自带目录临时回退；成功拉取后，暂时断网只保留同一账号的上次目录，不混入静态模型。服务端报告无模型或拒绝访问时，不显示静态目录。退出或切换账号会隔离目录缓存。
-
-在 **设置 → ChatGPT Codex** 可查看目录来自上游、上次成功缓存还是内置回退。模型选择器只展示现有 Responses 传输能表达的推理档位。
-
-如无法生成设备码，请检查网络，以及 ChatGPT 账号安全设置或组织策略是否允许 Codex 设备登录。提示重新登录时，可在同一面板重登；限流时请等待，不需要重新登录。上游为传统 Codex Responses 接口，不是 OpenAI 公共 API，兼容性可能随上游改变。
+登录后，插件约每五分钟同步一次 Codex 模型目录。**设置 → ChatGPT Codex** 显示模型数量和目录来源，包括在线目录、当前账号上次同步的目录和内置目录。
 
 ## 用 Codex 订阅生图
 
-登录后，在支持 DSH 工具调用的会话里直接说「生成一张白底的橙色小猫插画」。每条用户消息最多触发一次 Codex 图片请求，输出一张图片。
+登录后，在支持 DSH 工具调用的会话中对 Agent 说「生成一张白底的橙色小猫插画」。每条用户消息可发起一次 Codex 图片请求，输出一张图。
 
-上传一张或多张参考图后，可以要求 `codex_edit_image` 根据这些参考生成一张编辑结果，也可以说「把刚才生成的小猫图换成蓝底」。结果可在会话卡片预览和下载，历史图片也可继续查看。生图和编辑使用已登录账号的 Codex 订阅额度，授权沿用 DSH 工具权限。
+上传一张或多张参考图后，可以让 Agent 调用 `codex_edit_image` 编辑图片，也可以直接说「把刚才生成的小猫图换成蓝底」。在会话卡片中可以预览和下载图片。生图和编辑使用当前账号的 Codex 订阅额度，工具授权由 DSH 管理。
 
-生成或编辑成功后，DSH 会在同一轮把图片交给当前支持视觉的模型。你可以一次交代「生成一张登录页插图，检查画面后把它用到页面里」。DSH 能为工具提供可读的附件路径时，Agent 可以从该路径复制图片到项目。切换到其他供应商的视觉模型时，图片会随会话请求发送给该模型。纯文本模型收到文字提示，图片仍可在会话卡片中查看。
+生成或编辑成功后，DSH 会在同一轮把图片交给当前选中的视觉模型，包括其他供应商的模型。纯文本模型收到文字结果。比如可以一次交代「生成一张登录页插图，检查画面后把它用到页面里」。DSH 提供可读的附件路径时，Agent 可以从该路径把图复制到项目。
 
 ## 悬浮窗与 API 标价估算
 
-在 **设置 → ChatGPT Codex** 开启 **悬浮窗**，并在 **显示内容** 中勾选 **API 标价估算**。窗口默认关闭，估算项默认勾选。升级时沿用已有的开关状态和位置。至少勾选一项才会显示悬浮窗，关掉总开关仍会保留勾选和位置。
+登录后，**设置 → ChatGPT Codex** 的登录管理卡显示邮箱、套餐、已用和剩余额度以及重置时间。在同一页面开启 **悬浮窗**，并从 **显示内容** 里勾选要查看的项目。悬浮窗默认关闭，API 标价估算默认勾选。
 
-已登录时，**ChatGPT Codex** 设置上方的登录管理卡显示完整邮箱、套餐、已用和剩余额度、重置时间。旧凭据暂缺的资料可随 OAuth 刷新补齐。
+- **账号与套餐**显示邮箱和套餐名称。
+- **Codex 额度**显示各用量窗口的剩余百分比和重置时间。缓存读数标为「上次」。
+- **API 标价估算**按模型的 token 用量和 OpenAI Standard API 标价，计算当前会话和此桌面配置下的累计金额。计入范围为 ChatGPT Codex 订阅请求，分叉继承的用量归入原会话。出现未计价请求或缺失记录时，金额显示为已计价小计。插件自动同步并缓存费率。[OpenAI Standard API 标价](https://developers.openai.com/api/docs/pricing)
 
-悬浮窗里的 **账号与套餐**和 **Codex 额度**各自可选，默认关闭。额度按上游返回的窗口显示剩余百分比和重置时间。查看登录管理卡或启用额度悬浮项时刷新，两处同时显示时共享查询。
-
-折叠后，已选内容横排在一条圆角状态条中。空间较窄时自动换行。上次读取的额度带有「上次」标记，点击状态条任意位置可展开。
-
-估算项分别显示当前会话与此桌面配置保留的 Codex 插件会话累计金额。单击标题栏可折叠或展开，拖动标题栏可移动悬浮窗。折叠后仍显示当前会话金额。回到设置可重置位置。关闭窗口或取消勾选估算项会停止读取用量和同步费率。
-
-估算按模型 token 查询 OpenAI Standard API 费率。会话记录按供应商标识筛选，只计入 ChatGPT Codex 订阅用量。分叉的继承内容只在原会话中计入。无法匹配费率或用量的请求标记为未计价，缺少记录时已计价金额以小计显示。费率从公开文档同步，失败时沿用仍适用的缓存。[OpenAI Standard API 标价](https://developers.openai.com/api/docs/pricing)
+点击标题栏折叠，点击折叠后的状态条展开，拖动标题栏移动窗口。设置页可以重置位置。关闭悬浮窗或升级插件时会保留勾选和位置。
 
 ## 凭据与卸载
 
-- OAuth grant 由 DSH 凭据服务保存为 `dsh-codex/codex-responses`，默认位于 `$DSH_HOME/.credentials.yaml`。它不是额外加密的凭据保险库；请保持目录的用户权限。不要分享、上传或提交该文件。
-- 本插件不会使用官方 Codex、Hermes 或 DSH 内置 pi-ai 的登录。能在当前 DSH Host 运行会话的其他客户端可能消耗该账号额度；不要在共享 Host 启用插件。
-- 可先在插件面板 **退出登录**，再从当前 profile 卸载插件。只删除本插件的 grant，不注销其他客户端；卸载 bundle 本身不会删除 DSH 凭据。
+DSH 凭据服务以 `dsh-codex/codex-responses` 为键保存插件的 OAuth grant，默认存放在 `$DSH_HOME/.credentials.yaml`。
+
+卸载时，在 **设置 → ChatGPT Codex** 点击 **退出登录** 清除该插件的登录凭据，再从 **插件** 页卸载。
 
 ## 开发验证
 
-`npm run check` 检查语法，`npm pack --dry-run` 检查发布内容。`npm test` 需要完整的 `0.2.2-rc.3` 依赖。若 npm 注册表缺少对应的 DSH 传递依赖，可直接用本机 Desktop 内置运行时（不启动第二个桌面实例，不读写用户凭据）：
+`npm run check` 检查语法，`npm pack --dry-run` 检查发布内容。`npm test` 使用 DSH `0.2.2-rc.3` 依赖。在 Windows 上也可以用 Desktop 内置运行时执行测试。
 
 ```powershell
 $app = "$env:LOCALAPPDATA/Programs/DeepSeek Harness"
@@ -54,4 +46,4 @@ $env:DSH_TEST_RUNTIME = "$app/resources/app.asar/dsh"
 & "$app/DeepSeek Harness.exe" --expose-internals --require ./test/desktop-runtime.cjs --test test/*.test.mjs
 ```
 
-测试使用合成 OAuth grant 与 SSE，不发送真实鉴权或推理请求。
+测试使用合成 OAuth grant 和 SSE 响应。
