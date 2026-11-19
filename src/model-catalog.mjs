@@ -142,5 +142,5 @@ export function createModelCatalog({ credentials, oauth, fetch, bundled, now = D
     return state.pending
   }
 
-  return { load, invalidate() { clearTimeout(timer); setState(undefined) } }
+  return { load, peek: () => active?.view, invalidate() { clearTimeout(timer); setState(undefined) } }
 }

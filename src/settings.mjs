@@ -14,7 +14,7 @@ export class SettingsError extends Error {
   }
 }
 
-export function createSettings({ begin, status, signOut, lifetime, local, catalogStatus }) {
+export function createSettings({ begin, status, signOut, lifetime, local, catalogStatus, estimator }) {
   let active = false
   const busy = () => new SettingsError('codex-responses/login-in-progress', 'A ChatGPT Codex sign-in is already running.')
   function requireOwner(principal) {
@@ -22,7 +22,21 @@ export function createSettings({ begin, status, signOut, lifetime, local, catalo
       throw new SettingsError('remote-access/denied', 'Only the local Host owner may manage ChatGPT Codex.')
     }
   }
+  function requireEstimator(principal) {
+    requireOwner(principal)
+    if (!estimator) throw new SettingsError('codex-responses/estimator-unavailable', 'API cost estimation is unavailable in this profile.')
+    return estimator
+  }
   return {
+    async estimatorPreferences(principal) {
+      return requireEstimator(principal).preferences()
+    },
+    async setEstimatorPreferences(principal, patch) {
+      return requireEstimator(principal).setPreferences(patch)
+    },
+    async *estimate(principal, sessionId, signal) {
+      yield* requireEstimator(principal).observe(sessionId, signal)
+    },
     async status(principal) {
       requireOwner(principal)
       const login = await status()

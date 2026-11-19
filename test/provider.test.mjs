@@ -31,16 +31,20 @@ test('catalog is unavailable before sign-in and uses the native Codex model iden
 test('a discovered model resolves and uses the same Responses transport on the selected account', async () => {
   let identity = 'first-account'
   let inference = 0
+  let catalogReads = 0
   const adapter = createCodexAdapter({ credentials: {
     catalogIdentity: async () => identity,
     accessToken: async (_oauth, expected) => {
       assert.equal(expected, identity)
       return token
     },
-  }, catalogFetch: async () => Response.json({ models: [{ slug: 'server-model', display_name: 'Server Model', visibility: 'list',
-    context_window: 500000, input_modalities: ['text', 'image'], supported_reasoning_levels: [{ effort: 'low' }], default_reasoning_level: 'low',
-    supports_reasoning_summary_parameter: false, supports_parallel_tool_calls: false,
-  }] }), fetch: async (url, init) => {
+  }, catalogFetch: async () => {
+    catalogReads++
+    return Response.json({ models: [{ slug: 'server-model', display_name: 'Server Model', visibility: 'list',
+      context_window: 500000, input_modalities: ['text', 'image'], supported_reasoning_levels: [{ effort: 'low' }], default_reasoning_level: 'low',
+      supports_reasoning_summary_parameter: false, supports_parallel_tool_calls: false,
+    }] })
+  }, fetch: async (url, init) => {
     inference++
     assert.equal(String(url), 'https://chatgpt.com/backend-api/codex/responses')
     const request = JSON.parse(new Headers(init.headers).get('content-encoding') === 'zstd'
@@ -51,7 +55,11 @@ test('a discovered model resolves and uses the same Responses transport on the s
     assert.equal(request.parallel_tool_calls, false)
     return new Response('fixture error', { status: 403 })
   } })
+  assert.deepEqual(adapter.publishedModelIds(), [])
+  assert.equal(catalogReads, 0)
   assert.deepEqual((await adapter.listModels(PROVIDER)).map(model => model.id), ['server-model'])
+  assert.deepEqual(adapter.publishedModelIds(), ['server-model'])
+  assert.equal(catalogReads, 1)
   const prepared = await adapter.prepareCall(PROVIDER, 'server-model')
   assert.deepEqual(prepared.model.inputModalities, ['text', 'image'])
   assert.equal(prepared.model.context.contextWindow, 500000)

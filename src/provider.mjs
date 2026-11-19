@@ -184,6 +184,10 @@ export function createCodexAdapter({ credentials, catalog = openaiCodexProvider(
       return { source: view?.source ?? 'unavailable', count: view?.models.length ?? 0 }
     }
 
+    publishedModelIds() {
+      return discovery?.peek()?.models.map(model => model.id) ?? []
+    }
+
     async listModels(provider) {
       if (provider !== PROVIDER) return []
       const models = discovery ? (await snapshot()).view.models : await credentials.status() === 'signed-in' ? bundled : []

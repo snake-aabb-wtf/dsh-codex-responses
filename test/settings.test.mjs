@@ -20,6 +20,29 @@ test('only the owner can manage the provider', async () => {
   assert.deepEqual(await settings.status(owner), { type: 'status', status: 'signed-out' })
 })
 
+test('the estimator authorizes local owners before reading or storing any configuration or usage', async () => {
+  const prefs = { enabled: false, position: null }
+  const calls = []
+  const estimator = {
+    preferences() { calls.push('read'); return prefs },
+    setPreferences(patch) { calls.push('save'); return { ...prefs, ...patch } },
+    async *observe(id) { calls.push('scan'); yield { sessionId: id } },
+  }
+  const local = createSettings({ estimator, local: () => true })
+  const remote = createSettings({ estimator, local: () => false })
+  const guest = { kind: 'paired' }
+  await assert.rejects(local.estimatorPreferences(guest), { code: 'remote-access/denied' })
+  await assert.rejects(remote.setEstimatorPreferences(owner, { enabled: true }), { code: 'remote-access/denied' })
+  await assert.rejects(remote.estimate(owner, 'session-a').next(), { code: 'remote-access/denied' })
+  assert.deepEqual(calls, [])
+  assert.deepEqual(await local.estimatorPreferences(owner), prefs)
+  assert.equal((await local.setEstimatorPreferences(owner, { enabled: true })).enabled, true)
+  const stream = local.estimate(owner, 'session-a')
+  assert.deepEqual((await stream.next()).value, { sessionId: 'session-a' })
+  await stream.return()
+  assert.deepEqual(calls, ['read', 'save', 'scan'])
+})
+
 test('device code is delivered privately and cancellation aborts the authorization', async () => {
   let finished = false
   const settings = createSettings({
