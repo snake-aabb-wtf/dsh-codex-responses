@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-responses",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "license": "MIT",
   "description": "ChatGPT Codex device authorization and Responses for DeepSeek Harness",
   "type": "module",
@@ -11,7 +11,7 @@
     "./typert": "./src/typert.mjs"
   },
   "files": ["src", "cordis.patch.yml", "README.md"],
-  "engines": { "node": ">=24", "dsh": "0.2.2-rc.3" },
+  "engines": { "node": ">=24", "dsh": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5" },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-api-remote-access", "@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-tool"] }
@@ -25,11 +25,11 @@
     "zod": "^4.1.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-authorization": "0.2.2-rc.3",
-    "@deepseek-ai/dsh-credentials": "0.2.2-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.2-rc.3",
-    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.3",
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.3",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.3"
+    "@deepseek-ai/dsh-authorization": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.3 || 0.2.2-rc.4 || 0.2.2-rc.5"
   }
 }

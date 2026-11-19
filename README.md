@@ -2,11 +2,11 @@
 
 简体中文 · [English](README.en.md)
 
-在 DeepSeek Harness Desktop `0.2.2-rc.3` 中使用 ChatGPT 订阅的 Codex 模型。插件负责设备码登录、OAuth 刷新和模型目录，DSH 负责对话、审批和工具执行。
+在 DeepSeek Harness Desktop `0.2.2-rc.3`、`0.2.2-rc.4` 和 `0.2.2-rc.5` 中使用 ChatGPT 订阅的 Codex 模型。三个版本使用同一个插件包。插件负责设备码登录、OAuth 刷新和模型目录，DSH 负责对话、审批和工具执行。
 
 ## 安装与登录（Windows Desktop）
 
-1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.5.tgz`。
+1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.6.tgz`。
 2. 在 Desktop 的 **插件 → 安装插件** 中选择本地 `.tgz`，或用 Desktop 自带的 CLI 运行 `dsh plugin --profile desktop add <tgz的绝对路径>`。
 3. 打开 **设置 → ChatGPT Codex**，点 **使用设备码登录**。复制设备码，点 **打开 OpenAI 验证页面**，在浏览器中输入设备码并授权。
 4. 在会话的模型选择器中，从 **ChatGPT Codex** 分组选择模型和推理档位。
@@ -41,7 +41,7 @@ DSH 凭据服务以 `dsh-codex/codex-responses` 为键保存插件的 OAuth gran
 
 ## 开发验证
 
-`npm run check` 检查语法，`npm pack --dry-run` 检查发布内容。`npm test` 使用 DSH `0.2.2-rc.3` 依赖。在 Windows 上也可以用 Desktop 内置运行时执行测试。
+`npm run check` 检查语法，`npm pack --dry-run` 检查发布内容。安装目标版本的 DSH 测试依赖后，运行 `npm test`。在 Windows 上也可以用 Desktop 内置运行时执行测试。
 
 ```powershell
 $app = "$env:LOCALAPPDATA/Programs/DeepSeek Harness"

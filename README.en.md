@@ -2,11 +2,11 @@
 
 [简体中文](README.md) · English
 
-Use Codex models from your ChatGPT subscription in DeepSeek Harness Desktop `0.2.2-rc.3`. The plugin handles device-code sign-in, OAuth token refresh, and model discovery. DSH manages conversations, approvals, and tool execution.
+Use Codex models from your ChatGPT subscription in DeepSeek Harness Desktop `0.2.2-rc.3`, `0.2.2-rc.4`, and `0.2.2-rc.5`. The same plugin package supports all three versions. The plugin handles device-code sign-in, OAuth token refresh, and model discovery. DSH manages conversations, approvals, and tool execution.
 
 ## Installation and sign-in on Windows
 
-1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.5.tgz`, which contains the plugin source and client bundle.
+1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.6.tgz`, which contains the plugin source and client bundle.
 2. In DSH Desktop, open **Plugins → Add plugin** and select the local `.tgz` file. You can also use the Desktop CLI and run `dsh plugin --profile desktop add <absolute-path-to-tgz>`.
 3. Open **Settings → ChatGPT Codex** and select **Sign in with a device code** (使用设备码登录). Copy the code, select **Open the OpenAI verification page** (打开 OpenAI 验证页面), then enter the code and authorize sign-in in your browser.
 4. In the conversation's model picker, select a model and reasoning level from the **ChatGPT Codex** group.
@@ -41,7 +41,7 @@ To uninstall, select **Sign out** (退出登录) in **Settings → ChatGPT Codex
 
 ## Development checks
 
-Run `npm run check` to check syntax and `npm pack --dry-run` to inspect the package contents. `npm test` uses DSH `0.2.2-rc.3` dependencies. On Windows, you can also run the tests with the runtime bundled with DSH Desktop.
+Run `npm run check` to check syntax and `npm pack --dry-run` to inspect the package contents. Install the test dependencies for the target DSH version, then run `npm test`. On Windows, you can also run the tests with the runtime bundled with DSH Desktop.
 
 ```powershell
 $app = "$env:LOCALAPPDATA/Programs/DeepSeek Harness"
