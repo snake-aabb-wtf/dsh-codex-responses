@@ -28,6 +28,7 @@ async function writeJson(file, value) {
 }
 
 export function createCostStorage(directory) {
+  // Retain the existing filename so previous window settings migrate in place.
   const prefs = join(directory, 'dsh-codex-estimator.json')
   const rates = join(directory, 'dsh-codex-rates.json')
   return {

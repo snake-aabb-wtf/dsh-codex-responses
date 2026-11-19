@@ -16,15 +16,32 @@ test('device authorization accepts a token response without expires_in, using th
     if (url.endsWith('/usercode')) return Response.json({ usercode: 'TEST-CODE', device_auth_id: 'fixture', interval: '5' })
     if (url.endsWith('/deviceauth/token')) return Response.json({ authorization_code: 'fixture', code_verifier: 'fixture' })
     assert.equal(init.body.get('redirect_uri'), `${host}/deviceauth/callback`)
-    return Response.json({ access_token: access, refresh_token: 'synthetic-refresh' })
+    const id = { email: 'owner@example.com', 'https://api.openai.com/auth': { chatgpt_plan_type: 'plus' } }
+    return Response.json({ access_token: access, refresh_token: 'synthetic-refresh',
+      id_token: `header.${Buffer.from(JSON.stringify(id)).toString('base64url')}.fixture` })
   } })
   const notices = []
   const grant = await oauth.login({ signal, notify: notice => notices.push(notice) })
   assert.equal(grant.accountId, 'test-account')
   assert.equal(grant.expires, expiry * 1000)
+  assert.deepEqual(grant.profile, { email: 'owner@example.com', plan: 'plus' })
+  assert.equal(Object.hasOwn(grant, 'id_token'), false)
   assert.deepEqual(stages, ['/api/accounts/deviceauth/usercode', '/api/accounts/deviceauth/token', '/oauth/token'])
   assert.equal(notices[0].userCode, 'TEST-CODE')
   assert.doesNotMatch(JSON.stringify(notices), /synthetic/)
+})
+
+test('OAuth refresh fills missing profile fields and ignores a conflicting account claim', async () => {
+  const current = { accountId: 'test-account', refresh: 'synthetic-old', profile: { email: 'owner@example.com' } }
+  const updated = { ...claims, 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account', chatgpt_plan_type: 'pro' } }
+  const mismatched = { email: 'different@example.com', 'https://api.openai.com/auth': { chatgpt_account_id: 'other' } }
+  const toJwt = value => `header.${Buffer.from(JSON.stringify(value)).toString('base64url')}.fixture`
+  const oauth = createDeviceOAuth({ fetch: async () => Response.json({
+    access_token: toJwt(updated), id_token: toJwt(mismatched),
+  }) })
+  const grant = await oauth.refresh(current, signal)
+  assert.deepEqual(grant.profile, { email: 'owner@example.com', plan: 'pro' })
+  assert.equal(grant.refresh, current.refresh)
 })
 
 test('invalid refresh reports only a classified code, never the response body', async () => {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createSettings } from '../src/settings.mjs'
+import { createFloatingPreferences } from '../src/floating-preferences.mjs'
 
 const owner = { kind: 'owner' }
 
@@ -20,23 +21,25 @@ test('only the owner can manage the provider', async () => {
   assert.deepEqual(await settings.status(owner), { type: 'status', status: 'signed-out' })
 })
 
-test('the estimator authorizes local owners before reading or storing any configuration or usage', async () => {
-  const prefs = { enabled: false, position: null }
+test('floating preferences and usage require a local owner', async () => {
+  const prefs = { enabled: false, position: null, items: { apiCost: true } }
   const calls = []
+  const floating = {
+    read() { calls.push('read'); return prefs },
+    update(patch) { calls.push('save'); return { ...prefs, ...patch } },
+  }
   const estimator = {
-    preferences() { calls.push('read'); return prefs },
-    setPreferences(patch) { calls.push('save'); return { ...prefs, ...patch } },
     async *observe(id) { calls.push('scan'); yield { sessionId: id } },
   }
-  const local = createSettings({ estimator, local: () => true })
-  const remote = createSettings({ estimator, local: () => false })
+  const local = createSettings({ estimator, floating, local: () => true })
+  const remote = createSettings({ estimator, floating, local: () => false })
   const guest = { kind: 'paired' }
-  await assert.rejects(local.estimatorPreferences(guest), { code: 'remote-access/denied' })
-  await assert.rejects(remote.setEstimatorPreferences(owner, { enabled: true }), { code: 'remote-access/denied' })
+  await assert.rejects(local.floatingPreferences(guest), { code: 'remote-access/denied' })
+  await assert.rejects(remote.setFloatingPreferences(owner, { enabled: true }), { code: 'remote-access/denied' })
   await assert.rejects(remote.estimate(owner, 'session-a').next(), { code: 'remote-access/denied' })
   assert.deepEqual(calls, [])
-  assert.deepEqual(await local.estimatorPreferences(owner), prefs)
-  assert.equal((await local.setEstimatorPreferences(owner, { enabled: true })).enabled, true)
+  assert.deepEqual(await local.floatingPreferences(owner), prefs)
+  assert.equal((await local.setFloatingPreferences(owner, { enabled: true })).enabled, true)
   const stream = local.estimate(owner, 'session-a')
   assert.deepEqual((await stream.next()).value, { sessionId: 'session-a' })
   await stream.return()
@@ -64,6 +67,43 @@ test('device code is delivered privately and cancellation aborts the authorizati
   controller.abort()
   assert.equal((await stream.next()).done, true)
   assert.equal(finished, true)
+})
+
+test('each subscription stream requires a local owner and stops when its item is deselected', async () => {
+  const floating = createFloatingPreferences({
+    readPreferences: () => ({ enabled: true, items: { account: true, quota: false } }),
+    writePreferences() {},
+  })
+  const calls = []
+  const monitor = { async *observe(kind, signal) {
+    calls.push(kind)
+    yield { kind }
+    assert.equal(signal.aborted, true)
+  } }
+  const local = createSettings({ floating, monitor, local: () => true })
+  const remote = createSettings({ floating, monitor, local: () => false })
+  await assert.rejects(remote.subscription(owner, 'account', 'settings').next(), { code: 'remote-access/denied' })
+  await assert.rejects(local.subscription({ kind: 'paired' }, 'account', 'settings').next(), { code: 'remote-access/denied' })
+  assert.equal((await local.subscription(owner, 'quota', 'floating').next()).done, true)
+  const stream = local.subscription(owner, 'account', 'floating')
+  assert.deepEqual((await stream.next()).value, { kind: 'account' })
+  await floating.update({ items: { account: false, quota: true } })
+  assert.equal((await stream.next()).done, true)
+  assert.deepEqual(calls, ['account'])
+})
+
+test('the settings subscription remains available with the floating window off and stops with its caller', async () => {
+  const controller = new AbortController()
+  const floating = createFloatingPreferences({ readPreferences: () => ({ enabled: false }), writePreferences() {} })
+  const monitor = { async *observe(kind, signal) {
+    yield { kind }
+    assert.equal(signal.aborted, true)
+  } }
+  const settings = createSettings({ floating, monitor, local: () => true })
+  const observing = settings.subscription(owner, 'quota', 'settings', controller.signal)
+  assert.deepEqual((await observing.next()).value, { kind: 'quota' })
+  controller.abort()
+  assert.equal((await observing.next()).done, true)
 })
 
 test('failed login drops all upstream details', async () => {

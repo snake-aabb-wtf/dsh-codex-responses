@@ -9,6 +9,8 @@ import { createSettings, SettingsError } from './settings.mjs'
 import { createCostEstimator } from './cost-estimator.mjs'
 import { createPricingCatalog } from './cost-pricing.mjs'
 import { createCostStorage } from './cost-storage.mjs'
+import { createFloatingPreferences } from './floating-preferences.mjs'
+import { createSubscriptionMonitor } from './subscription.mjs'
 
 const key = credentialKey('dsh-codex', PROVIDER)
 export const name = 'dsh-codex'
@@ -42,13 +44,13 @@ class CodexSettings extends TypertRemoteService {
     catch (error) { throw remoteFailure(error) }
   }
 
-  async estimatorPreferences() {
-    try { return await this.settings.estimatorPreferences(this.ctx.invocation?.peer.principal) }
+  async floatingPreferences() {
+    try { return await this.settings.floatingPreferences(this.ctx.invocation?.peer.principal) }
     catch (error) { throw remoteFailure(error) }
   }
 
-  async setEstimatorPreferences(patch) {
-    try { return await this.settings.setEstimatorPreferences(this.ctx.invocation?.peer.principal, patch) }
+  async setFloatingPreferences(patch) {
+    try { return await this.settings.setFloatingPreferences(this.ctx.invocation?.peer.principal, patch) }
     catch (error) { throw remoteFailure(error) }
   }
 
@@ -56,11 +58,17 @@ class CodexSettings extends TypertRemoteService {
     try { yield* this.settings.estimate(this.ctx.invocation?.peer.principal, sessionId, signal) }
     catch (error) { throw remoteFailure(error) }
   }
+
+  async *subscription(kind, surface, signal) {
+    try { yield* this.settings.subscription(this.ctx.invocation?.peer.principal, kind, surface, signal) }
+    catch (error) { throw remoteFailure(error) }
+  }
 }
 
 const remoteInitializers = []
-for (const method of ['status', 'signOut', 'login', 'estimatorPreferences', 'setEstimatorPreferences', 'estimate']) {
-  const decorator = method === 'login' || method === 'estimate' ? Remote({ mode: 'stream' }) : Remote
+const streams = new Set(['login', 'estimate', 'subscription'])
+for (const method of ['status', 'signOut', 'login', 'floatingPreferences', 'setFloatingPreferences', 'estimate', 'subscription']) {
+  const decorator = streams.has(method) ? Remote({ mode: 'stream' }) : Remote
   decorator(CodexSettings.prototype[method], { name: method, addInitializer: initialize => remoteInitializers.push(initialize) })
 }
 
@@ -68,6 +76,7 @@ export function apply(ctx) {
   const catalog = openaiCodexProvider()
   const oauth = createDeviceOAuth()
   const credentials = createCredentialStore(ctx.credentials, key)
+  const monitor = createSubscriptionMonitor({ credentials, oauth })
   const lifetime = new AbortController()
   ctx.effect(() => () => lifetime.abort(), 'dsh-codex login lifetime')
   const adapter = createCodexAdapter({ credentials, catalog, oauth, signal: lifetime.signal,
@@ -81,17 +90,22 @@ export function apply(ctx) {
   ctx.authorization.registerFlow({ key, label: DISPLAY_NAME, methods: [{ id: 'device-code', label: 'Device code' }],
     run: session => runDeviceLogin({ ...session, commit: async record => {
       await credentials.save(record, session.signal)
+      monitor.invalidate()
       adapter.invalidateCatalog()
       ctx.emit('llm/models-updated', PROVIDER)
     } }, oauth),
   })
   ctx.llm.registerAdapter([PROVIDER], adapter)
   ctx.on('credentials/record-updated', changed => {
-    if (changed === key) ctx.emit('llm/models-updated', PROVIDER)
+    if (changed === key) {
+      monitor.notify()
+      ctx.emit('llm/models-updated', PROVIDER)
+    }
   })
   const profile = ctx.get('profileContext')
   const storage = profile?.name === 'desktop' && profile.dir ? createCostStorage(profile.dir) : undefined
-  const estimator = storage && createCostEstimator({ ...storage, signal: lifetime.signal,
+  const floating = storage && createFloatingPreferences({ ...storage, signal: lifetime.signal })
+  const estimator = floating && createCostEstimator({ floating, signal: lifetime.signal,
     pricing: createPricingCatalog(storage),
     query: {
       async listSessions(signal) {
@@ -106,10 +120,11 @@ export function apply(ctx) {
     publishedModelIds: () => adapter.publishedModelIds(),
   })
   new CodexSettings(ctx, createSettings({ ...credentials, lifetime: lifetime.signal,
-    estimator,
+    estimator, floating, monitor,
     catalogStatus: () => adapter.catalogStatus(),
     signOut: async () => {
       await credentials.signOut()
+      monitor.invalidate()
       adapter.invalidateCatalog()
       ctx.emit('llm/models-updated', PROVIDER)
     },

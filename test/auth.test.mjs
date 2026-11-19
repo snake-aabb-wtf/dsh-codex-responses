@@ -133,3 +133,24 @@ test('a cancelled attempt cannot replace a grant while waiting for the credentia
   await assert.rejects(writing, { name: 'AbortError' })
   assert.equal(records.get(key).payload.access, previously.access)
 })
+
+test('account display reads legacy token claims and picks up refreshed fields', async () => {
+  const old = fixture('legacy', Date.now() - 1)
+  const payload = { 'https://api.openai.com/profile': { email: 'owner@example.com' },
+    'https://api.openai.com/auth': { chatgpt_account_id: old.accountId } }
+  old.access = `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.fixture`
+  const { credentials, records } = harness(record(old))
+  const store = createCredentialStore(credentials, key)
+  assert.deepEqual(await store.accountProfile(), {
+    status: 'signed-in', accountId: old.accountId, email: 'owner@example.com', plan: null,
+  })
+  await store.accessToken({ async refresh() {
+    return { ...fixture('next'), profile: { email: 'owner@example.com', plan: 'pro', idToken: 'never-store' } }
+  } })
+  assert.deepEqual(await store.accountProfile(), {
+    status: 'signed-in', accountId: old.accountId, email: 'owner@example.com', plan: 'pro',
+  })
+  assert.doesNotMatch(JSON.stringify(records.get(key)), /never-store/)
+  await store.signOut()
+  assert.deepEqual(await store.accountProfile(), { status: 'signed-out' })
+})

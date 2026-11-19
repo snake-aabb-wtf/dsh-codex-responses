@@ -1,3 +1,5 @@
+import { claimProfile, cleanProfile, decodeClaims } from './account-profile.mjs'
+
 export const DEVICE_URL = 'https://auth.openai.com/codex/device'
 
 const refreshWindowMs = 300_000
@@ -21,8 +23,10 @@ function readGrant(record) {
   return record?.kind === 'grant' && validGrant(record.payload) ? record.payload : undefined
 }
 
-function projectGrant({ access, refresh, expires, accountId }) {
-  return { kind: 'grant', payload: { type: 'oauth', access, refresh, expires, accountId } }
+function projectGrant({ access, refresh, expires, accountId, profile }) {
+  const details = cleanProfile(profile)
+  return { kind: 'grant', payload: { type: 'oauth', access, refresh, expires, accountId,
+    ...(Object.keys(details).length ? { profile: details } : {}) } }
 }
 
 function isExpired(grant) {
@@ -66,6 +70,16 @@ export function createCredentialStore(credentials, key) {
     },
     async catalogIdentity() {
       return readGrant(await credentials.readRecord(key))?.accountId
+    },
+    async accountProfile() {
+      const record = await credentials.readRecord(key)
+      const grant = readGrant(record)
+      if (!grant) return { status: record === undefined ? 'signed-out' : 'relogin-required' }
+      const { accountId } = grant
+      const { email = null, plan = null } = {
+        ...cleanProfile(grant.profile), ...claimProfile(decodeClaims(grant.access), accountId),
+      }
+      return { status: 'signed-in', accountId, email, plan }
     },
     async accessToken(oauth, expectedAccount) {
       const record = await credentials.readRecord(key)

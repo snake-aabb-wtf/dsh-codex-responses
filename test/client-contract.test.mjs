@@ -8,9 +8,12 @@ import { TYPERT } from '../src/typert.mjs'
 async function loadClient({ react = {}, navigator } = {}) {
   let client
   const source = await readFile(new URL('../src/client.cjs', import.meta.url), 'utf8')
-  runInNewContext(source, { AbortController, navigator, window: { __ModuleLoader__: { load({ factory }) {
-    client = factory(id => id === 'zod' ? { z } : react)
-  } } } })
+  runInNewContext(source, { AbortController, navigator, window: {
+    innerWidth: 1000, innerHeight: 800,
+    __ModuleLoader__: { load({ factory }) {
+      client = factory(id => id === 'zod' ? { z } : react)
+    } },
+  } })
   return client
 }
 
@@ -58,40 +61,211 @@ test('Codex registers only a top-level Settings section once status access is gr
   ])
 })
 
-test('the estimator starts disabled and waits for the saved Host preference before enabling', async () => {
-  const client = await loadClient()
-  let resolveSave
-  let cost
-  const remote = {
-    async estimatorPreferences() { return { ok: true, value: { enabled: false, position: null } } },
-    setEstimatorPreferences() { return new Promise(resolve => { resolveSave = resolve }) },
-  }
+async function mountFloating(remote, hooks = {}) {
+  const client = await loadClient({ react: {
+    createElement(type, props, ...children) { return { type, props, children } },
+    useEffect() {},
+    useRef(initial) { return { current: initial } },
+    useState(initial) { return [initial, () => {}] },
+    useSyncExternalStore(_subscribe, get) { return get() },
+    ...hooks,
+  } })
+  let floating
+  let render
   await client.apply({ remote: { $host: { isLoopback: true }, async $mount() {} },
     inject(_keys, register) { register({ remote: { codexResponses: remote },
       remoteAccess: { whenAccess(_method, setup) { setup() } },
-      slots: { inject(_name, setup) { setup() }, register(entry) {
-        if (entry.name === 'shell.overlay') cost = entry.inject().cost
+      slots: { inject(_name, setup) { setup() }, register(entry, Overlay) {
+        if (entry.name === 'shell.overlay') {
+          const props = entry.inject()
+          floating = props.floating
+          render = () => Overlay(props)
+        }
       } },
     }) },
   })
-  await cost.load()
-  assert.equal(cost.get().preferences.enabled, false)
-  const saving = cost.save({ enabled: true })
-  assert.equal(cost.get().preferences.enabled, false)
-  resolveSave({ ok: true, value: { enabled: true, position: null } })
-  await saving
-  assert.equal(cost.get().preferences.enabled, true)
+  await floating.load()
+  return { floating, render }
+}
 
-  const disable = cost.save({ enabled: false })
-  assert.equal(cost.get().preferences.enabled, false)
-  resolveSave({ ok: true, value: { enabled: false, position: null } })
+test('the floating window waits for saved preferences and requires at least one selected item', async () => {
+  let resolveSave
+  let pendingPatch
+  const position = { x: 30, y: 40 }
+  const initial = { enabled: false, position, items: { apiCost: false } }
+  const { floating, render } = await mountFloating({
+    async floatingPreferences() { return { ok: true, value: initial } },
+    setFloatingPreferences(patch) {
+      pendingPatch = patch
+      return new Promise(resolve => { resolveSave = resolve })
+    },
+  })
+
+  async function save(patch, saved) {
+    const saving = floating.save(patch)
+    assert.equal(pendingPatch, patch)
+    assert.equal(render(), null)
+    resolveSave({ ok: true, value: saved })
+    await saving
+  }
+
+  assert.equal(render(), null)
+  const empty = { ...initial, enabled: true }
+  await save({ enabled: true }, empty)
+  assert.equal(floating.get().preferences.enabled, true)
+  assert.equal(render(), null)
+
+  const visible = { ...empty, items: { apiCost: true } }
+  await save({ items: { apiCost: true } }, visible)
+  assert.equal(render().props.position, position)
+
+  const disable = floating.save({ enabled: false })
+  assert.equal(render(), null)
+  resolveSave({ ok: false })
   await disable
+  assert.equal(render().props.position, position)
+
+  await save({ items: { apiCost: false } }, empty)
+  assert.equal(render(), null)
+  assert.deepEqual(floating.get().preferences, empty)
+})
+
+test('releasing a drag saves the final coordinates without an intermediate pointer move', async () => {
+  const position = { x: 30, y: 40 }
+  const { render } = await mountFloating({
+    async floatingPreferences() { return { ok: true, value: { enabled: true, position, items: { apiCost: true } } } },
+  })
+  const shell = render()
+  let moved
+  const window = shell.type({ ...shell.props, onMove: point => { moved = point } })
+  window.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40 }) }
+  const handle = window.children.find(node => node.props?.onPointerDown).props
+  const pointer = { button: 0, pointerId: 1, clientX: 40, clientY: 50, currentTarget: { setPointerCapture() {} } }
+  handle.onPointerDown(pointer)
+  handle.onPointerUp(pointer)
+  assert.equal(moved, undefined)
+  handle.onPointerDown(pointer)
+  handle.onPointerUp({ ...pointer, clientX: 80, clientY: 110 })
+  assert.equal(moved?.x, 70)
+  assert.equal(moved?.y, 100)
+})
+
+test('account and quota mount independently of each other and of the cost estimator', async () => {
+  for (const kind of ['account', 'quota']) {
+    const { render } = await mountFloating({
+      async floatingPreferences() {
+        return { ok: true, value: { enabled: true, position: null,
+          items: { apiCost: false, account: kind === 'account', quota: kind === 'quota' } } }
+      },
+    })
+    const panes = render().children.flat()
+    assert.equal(panes.length, 1)
+    assert.equal(panes[0].props.key, kind)
+  }
+})
+
+test('collapsed summaries expose compact labels, two quota values and a separate stale indicator', async () => {
+  const states = [
+    { sessionId: null, current: { usd: 0.058, priced: 1, unpriced: 0, awaitingRates: 0 } },
+    { kind: 'account', status: 'signed-in', email: 'owner@example.com', plan: 'plus' },
+    { kind: 'quota', status: 'stale', windows: [
+      { remaining: 68, durationSeconds: 18_000, resetsAt: null },
+      { remaining: 39, durationSeconds: 604_800, resetsAt: null },
+    ] },
+  ]
+  const { render } = await mountFloating({
+    async floatingPreferences() {
+      return { ok: true, value: { enabled: true, position: null, items: { apiCost: true, account: true, quota: true } } }
+    },
+  }, {
+    useState(initial) { return [initial === undefined ? states.shift() : initial, () => {}] },
+  })
+  const summaries = render().children.flat().map(pane => {
+    const [content] = pane.children
+    return descendants(content.type({ ...content.props, collapsed: true }))
+  })
+  const texts = nodes => nodes.filter(node => typeof node === 'string')
+  assert.deepEqual(texts(summaries[0]), ['会话', '$0.058'])
+  assert.deepEqual(texts(summaries[1]), ['Plus'])
+  assert.deepEqual(texts(summaries[2]), ['5 小时', '68%', '7 天', '39%', '上次'])
+})
+
+test('account details and the collapsed summary use the same human-readable plan labels', async () => {
+  let plan
+  const { render } = await mountFloating({
+    async floatingPreferences() {
+      return { ok: true, value: { enabled: true, position: null, items: { account: true } } }
+    },
+  }, {
+    useState(initial) {
+      return [initial === undefined ? { kind: 'account', status: 'signed-in', plan } : initial, () => {}]
+    },
+  })
+  const [pane] = render().children.flat()
+  const [content] = pane.children
+  for (const [raw, expected] of [
+    ['prolite', 'Pro 100'], ['pro', 'Pro 200'], ['promax', 'Pro 500'],
+    ['plus', 'Plus'], ['go', 'Go'], ['education', 'Edu'],
+    ['future_tier', 'future_tier'], ['constructor', 'constructor'],
+  ]) {
+    plan = raw
+    assert.ok(descendants(content.type({ ...content.props, collapsed: false })).includes(expected), raw)
+    assert.deepEqual(content.type({ ...content.props, collapsed: true }).children, [expected], raw)
+  }
+})
+
+test('the entire title bar toggles with a click but not after a drag', async () => {
+  const { render } = await mountFloating({
+    async floatingPreferences() {
+      return { ok: true, value: { enabled: true, position: { x: 30, y: 40 }, items: { apiCost: true } } }
+    },
+  })
+  const shell = render()
+  let toggles = 0
+  let moves = 0
+  const onToggle = () => { toggles++ }
+  const onMove = () => { moves++ }
+  const view = shell.type({ ...shell.props, onToggle, onMove })
+  view.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40 }) }
+  const bar = view.children.find(node => node.props?.onPointerDown)
+  assert.equal(bar.type, 'button')
+  assert.equal(bar.props['aria-expanded'], true)
+  assert.ok(descendants(bar).includes('ChatGPT Subscription'))
+
+  const pointer = { button: 0, pointerId: 1, clientX: 40, clientY: 50, currentTarget: { setPointerCapture() {} } }
+  bar.props.onPointerDown(pointer)
+  bar.props.onPointerUp({ ...pointer, clientX: 41 })
+  bar.props.onClick({ detail: 1 })
+  assert.equal(toggles, 1)
+  assert.equal(moves, 0)
+
+  bar.props.onPointerDown(pointer)
+  bar.props.onPointerUp({ ...pointer, clientX: 60 })
+  bar.props.onClick({ detail: 1 })
+  assert.equal(toggles, 1)
+  assert.equal(moves, 1)
+
+  bar.props.onPointerDown(pointer)
+  bar.props.onPointerMove({ ...pointer, clientX: 60 })
+  bar.props.onPointerUp(pointer)
+  bar.props.onClick({ detail: 1 })
+  assert.equal(toggles, 1)
+  bar.props.onClick({ detail: 0 })
+  assert.equal(toggles, 2)
+
+  const collapsed = shell.type({ ...shell.props, collapsed: true, onToggle, onMove })
+  const collapsedBar = collapsed.children.find(node => node.props?.onPointerDown)
+  assert.equal(collapsedBar.type, 'button')
+  assert.equal(collapsedBar.props['aria-expanded'], false)
+  collapsedBar.props.onClick({ detail: 1 })
+  assert.equal(toggles, 3)
 })
 
 const nextTurn = () => new Promise(resolve => setImmediate(resolve))
 const status = value => ({ ok: true, value: { type: 'status', status: value } })
 
 function descendants(node) {
+  if (Array.isArray(node)) return node.flatMap(descendants)
   return [node, ...(node?.children ?? []).flatMap(descendants)]
 }
 

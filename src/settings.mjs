@@ -14,7 +14,7 @@ export class SettingsError extends Error {
   }
 }
 
-export function createSettings({ begin, status, signOut, lifetime, local, catalogStatus, estimator }) {
+export function createSettings({ begin, status, signOut, lifetime, local, catalogStatus, estimator, floating, monitor }) {
   let active = false
   const busy = () => new SettingsError('codex-responses/login-in-progress', 'A ChatGPT Codex sign-in is already running.')
   function requireOwner(principal) {
@@ -27,15 +27,40 @@ export function createSettings({ begin, status, signOut, lifetime, local, catalo
     if (!estimator) throw new SettingsError('codex-responses/estimator-unavailable', 'API cost estimation is unavailable in this profile.')
     return estimator
   }
+  function requireFloating(principal) {
+    requireOwner(principal)
+    if (!floating) throw new SettingsError('codex-responses/floating-unavailable', 'Floating window settings are unavailable in this profile.')
+    return floating
+  }
   return {
-    async estimatorPreferences(principal) {
-      return requireEstimator(principal).preferences()
+    async floatingPreferences(principal) {
+      return requireFloating(principal).read()
     },
-    async setEstimatorPreferences(principal, patch) {
-      return requireEstimator(principal).setPreferences(patch)
+    async setFloatingPreferences(principal, patch) {
+      return requireFloating(principal).update(patch)
     },
     async *estimate(principal, sessionId, signal) {
       yield* requireEstimator(principal).observe(sessionId, signal)
+    },
+    async *subscription(principal, kind, surface, callerSignal) {
+      const preferences = requireFloating(principal)
+      if (!monitor) throw new SettingsError('codex-responses/subscription-unavailable', 'Codex subscription status is unavailable.')
+      const scope = [callerSignal, lifetime].filter(Boolean)
+      if (surface === 'settings') {
+        yield* monitor.observe(kind, AbortSignal.any(scope))
+        return
+      }
+      const visible = prefs => prefs.enabled && prefs.items[kind] === true
+      const hidden = new AbortController()
+      const signal = AbortSignal.any([hidden.signal, ...scope])
+      const unsubscribe = preferences.subscribe(prefs => { if (!visible(prefs)) hidden.abort() })
+      try {
+        if (!visible(await preferences.read()) || signal.aborted) return
+        yield* monitor.observe(kind, signal)
+      } finally {
+        unsubscribe()
+        hidden.abort()
+      }
     },
     async status(principal) {
       requireOwner(principal)

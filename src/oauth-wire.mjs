@@ -1,5 +1,6 @@
 import { setTimeout as wait } from 'node:timers/promises'
 import { CodexAuthError, DEVICE_URL } from './auth.mjs'
+import { claimProfile, cleanProfile, decodeClaims } from './account-profile.mjs'
 
 const authOrigin = 'https://auth.openai.com'
 const clientId = 'app_EMoamEEZ73f0CkXaXp7hrann'
@@ -10,15 +11,9 @@ function fail(stage) {
   return new CodexAuthError(`CODEX_${stage}_FAILED`, `ChatGPT Codex ${stage.toLowerCase()} failed.`)
 }
 
-function accessClaims(access) {
-  if (typeof access !== 'string' || !/^[\w-]+\.[\w-]+\.[\w-]+$/u.test(access)) return undefined
-  try { return JSON.parse(Buffer.from(access.split('.')[1], 'base64url').toString('utf8')) }
-  catch { return undefined }
-}
-
 function projection(body, stage, previous) {
   const access = body?.access_token
-  const claims = accessClaims(access)
+  const claims = decodeClaims(access)
   const accountId = claims?.['https://api.openai.com/auth']?.chatgpt_account_id
   const now = Date.now()
   const claimExpiry = Number.isSafeInteger(claims?.exp) ? claims.exp * 1000 : Infinity
@@ -28,7 +23,10 @@ function projection(body, stage, previous) {
   const refresh = body?.refresh_token ?? previous?.refresh
   if (!/^[-\w]+$/u.test(accountId ?? '') || typeof accountId !== 'string' || typeof refresh !== 'string'
     || !/^[\x21-\x7e]+$/u.test(refresh) || !Number.isSafeInteger(expires) || expires <= now) throw fail(stage)
-  return { type: 'oauth', access, refresh, accountId, expires }
+  const previousProfile = previous?.accountId === accountId
+    ? { ...claimProfile(decodeClaims(previous.access), accountId), ...cleanProfile(previous.profile) } : {}
+  const profile = { ...previousProfile, ...claimProfile(decodeClaims(body?.id_token), accountId), ...claimProfile(claims, accountId) }
+  return { type: 'oauth', access, refresh, accountId, expires, ...(Object.keys(profile).length ? { profile } : {}) }
 }
 
 export function createDeviceOAuth({ fetch = (...args) => globalThis.fetch(...args) } = {}) {
