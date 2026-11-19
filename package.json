@@ -1,6 +1,7 @@
 {
   "name": "dsh-codex-responses",
   "version": "0.5.2",
+  "license": "MIT",
   "description": "ChatGPT Codex device authorization and Responses for DeepSeek Harness",
   "type": "module",
   "main": "./src/index.mjs",
