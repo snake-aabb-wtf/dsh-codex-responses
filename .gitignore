@@ -1,0 +1,5 @@
+node_modules/
+.pnpm-store/
+*.tgz
+.credentials.yaml
+.test-state/

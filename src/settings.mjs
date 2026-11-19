@@ -1,0 +1,80 @@
+import { DEVICE_URL } from './auth.mjs'
+
+const stages = new Map([
+  ['CODEX_DEVICE_FAILED', ['device-failed', 'Could not start a Codex device sign-in.']],
+  ['CODEX_POLL_FAILED', ['poll-failed', 'Could not confirm device authorization with OpenAI.']],
+  ['CODEX_EXCHANGE_FAILED', ['exchange-failed', 'OpenAI rejected the Codex OAuth token exchange.']],
+  ['CODEX_TOKEN_FAILED', ['token-failed', 'The Codex token response could not be used.']],
+])
+
+export class SettingsError extends Error {
+  constructor(code, message) {
+    super(message)
+    this.code = code
+  }
+}
+
+export function createSettings({ begin, status, signOut, lifetime, local, catalogStatus }) {
+  let active = false
+  const busy = () => new SettingsError('codex-responses/login-in-progress', 'A ChatGPT Codex sign-in is already running.')
+  function requireOwner(principal) {
+    if (principal?.kind !== 'owner' || local?.() === false) {
+      throw new SettingsError('remote-access/denied', 'Only the local Host owner may manage ChatGPT Codex.')
+    }
+  }
+  return {
+    async status(principal) {
+      requireOwner(principal)
+      const login = await status()
+      const catalog = login === 'signed-in' && catalogStatus ? await catalogStatus() : undefined
+      return { type: 'status', status: login, ...(catalog ? { catalog: { source: catalog.source, count: catalog.count } } : {}) }
+    },
+    async signOut(principal) {
+      requireOwner(principal)
+      if (active) throw busy()
+      active = true
+      try {
+        await signOut()
+        return { type: 'status', status: 'signed-out' }
+      } finally { active = false }
+    },
+    async *login(principal, callerSignal) {
+      requireOwner(principal)
+      if (active) throw busy()
+      const attempt = new AbortController()
+      const signal = AbortSignal.any([attempt.signal, ...[callerSignal, lifetime].filter(Boolean)])
+      if (signal.aborted) return
+      active = true
+      const device = Promise.withResolvers()
+      const cancelled = Promise.withResolvers()
+      const onCancel = () => cancelled.resolve({ type: 'cancelled' })
+      signal.addEventListener('abort', onCancel, { once: true })
+      const outcome = Promise.resolve().then(() => begin({
+        async prompt() { throw new Error('Unexpected authorization prompt.') },
+        notify({ url, code }) {
+          if (!signal.aborted && url === DEVICE_URL && typeof code === 'string' && /^[A-Z0-9-]{4,32}$/u.test(code)) {
+            device.resolve({ type: 'device', url, code })
+          }
+        },
+      }, signal)).then(value => ({ type: 'settled', value }), error => ({ type: 'failed', stage: stages.get(error?.code) }))
+      try {
+        let event = await Promise.race([device.promise, outcome, cancelled.promise])
+        if (event.type === 'device' && !signal.aborted) {
+          yield event
+          event = await Promise.race([outcome, cancelled.promise])
+        }
+        if (signal.aborted || event.value?.status === 'cancelled') return
+        if (event.stage) throw new SettingsError(`codex-responses/${event.stage[0]}`, event.stage[1])
+        if (event.value?.status !== 'authorized') {
+          throw new SettingsError('codex-responses/login-failed', 'Device sign-in failed. Check that Codex device-code login is enabled and try again.')
+        }
+        yield { type: 'status', status: await status() }
+      } finally {
+        signal.removeEventListener('abort', onCancel)
+        attempt.abort()
+        await outcome
+        active = false
+      }
+    },
+  }
+}
