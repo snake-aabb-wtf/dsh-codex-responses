@@ -11,6 +11,7 @@ import { createPricingCatalog } from './cost-pricing.mjs'
 import { createCostStorage } from './cost-storage.mjs'
 import { createFloatingPreferences } from './floating-preferences.mjs'
 import { createSubscriptionMonitor } from './subscription.mjs'
+import { registerCodexImageTool } from './image-generation.mjs'
 
 const key = credentialKey('dsh-codex', PROVIDER)
 export const name = 'dsh-codex'
@@ -78,7 +79,15 @@ export function apply(ctx) {
   const credentials = createCredentialStore(ctx.credentials, key)
   const monitor = createSubscriptionMonitor({ credentials, oauth })
   const lifetime = new AbortController()
+  let imageLogin = new AbortController()
+  const invalidateImageLogin = () => {
+    imageLogin.abort()
+    imageLogin = new AbortController()
+  }
   ctx.effect(() => () => lifetime.abort(), 'dsh-codex login lifetime')
+  ctx.inject(['tools', 'attachments'], toolCtx => {
+    registerCodexImageTool(toolCtx, { credentials, oauth, signal: lifetime.signal, loginSignal: () => imageLogin.signal })
+  })
   const adapter = createCodexAdapter({ credentials, catalog, oauth, signal: lifetime.signal,
     onCatalogChange: () => ctx.emit('llm/models-updated', PROVIDER),
     image: {
@@ -90,6 +99,7 @@ export function apply(ctx) {
   ctx.authorization.registerFlow({ key, label: DISPLAY_NAME, methods: [{ id: 'device-code', label: 'Device code' }],
     run: session => runDeviceLogin({ ...session, commit: async record => {
       await credentials.save(record, session.signal)
+      invalidateImageLogin()
       monitor.invalidate()
       adapter.invalidateCatalog()
       ctx.emit('llm/models-updated', PROVIDER)
@@ -124,6 +134,7 @@ export function apply(ctx) {
     catalogStatus: () => adapter.catalogStatus(),
     signOut: async () => {
       await credentials.signOut()
+      invalidateImageLogin()
       monitor.invalidate()
       adapter.invalidateCatalog()
       ctx.emit('llm/models-updated', PROVIDER)

@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
-  const { createElement: element, useEffect, useRef, useState, useSyncExternalStore } = require('react')
+  const { createElement: element, useEffect, useMemo, useRef, useState, useSyncExternalStore } = require('react')
   const { z } = require('zod')
   const packageName = 'dsh-codex-responses'
   const namespace = 'codexResponses'
@@ -878,10 +878,155 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     )
   }
 
+  const imageExtension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }
+  const imageDimensions = { width: z.number().int().positive(), height: z.number().int().positive() }
+  const imageAttachment = z.strictObject({
+    attachmentId: z.string().min(1).max(256),
+    mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    bytes: z.number().int().positive(),
+    ...imageDimensions,
+    name: z.string().optional(),
+    originalDimensions: z.strictObject(imageDimensions).optional(),
+  })
+  const storedImageResult = z.strictObject({
+    attachments: z.array(imageAttachment).min(1).max(4),
+    requested: z.number().int().min(1).max(4),
+    stopReason: z.string().max(64).optional(),
+  }).refine(result => result.attachments.length <= result.requested)
+  const partialImageResult = 'Codex saved image result: '
+  const imageErrors = {
+    ABORTED: '已取消生图。',
+    ABORTED_BEFORE_DISPATCH: '已取消生图。',
+    interrupted: '生图已中断。',
+    MISSING_CREDENTIAL: '请在设置中登录 ChatGPT Codex 后重试。',
+    CODEX_RELOGIN_REQUIRED: '请在设置中重新登录 ChatGPT Codex。',
+    CODEX_REFRESH_UNAVAILABLE: '暂时无法刷新 Codex 登录，请稍后再试。',
+    CODEX_IMAGE_AUTH: 'Codex 生图认证失败，请检查登录状态。',
+    CODEX_IMAGE_PERMISSION: 'Codex 未允许这次生图请求。',
+    CODEX_IMAGE_PROMPT: '请提供图片描述。',
+    CODEX_IMAGE_LIMIT: '已达到 Codex 生图限额，请查看剩余额度。',
+    CODEX_IMAGE_UNCERTAIN: '连接已中断，暂时无法确认图片是否生成。',
+    CODEX_IMAGE_UNAVAILABLE: 'Codex 生图服务暂时不可用。',
+    CODEX_IMAGE_REJECTED: 'Codex 拒绝了这次生图请求。',
+    CODEX_IMAGE_INVALID: 'Codex 返回的图片无法使用。',
+    CODEX_IMAGE_SAVE: '图片已生成，但 DSH 无法保存。',
+    CODEX_IMAGE_COUNT: '每次只支持输出一张图片。',
+    CODEX_IMAGE_TURN_LIMIT: '本轮已提交一次图片请求。需要另一张时，请发送新消息。',
+    CODEX_IMAGE_COUNT_UNSUPPORTED: 'Codex 拒绝了指定张数。',
+    CODEX_IMAGE_REFERENCE: '找不到所选参考图，请选择本轮上传的图片或最近一次 Codex 生图结果。',
+  }
+  const imageStyles = `
+    .dsh-codex-image {
+      min-width: 0;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid var(--dsw-alias-settings-card-stroke, ButtonBorder);
+      border-radius: var(--dsw-radius-panel, 12px);
+      background: var(--dsw-alias-settings-card-fill, Canvas);
+      color: var(--dsw-alias-label-primary, CanvasText);
+      padding: 9px 12px;
+      font-size: 13px;
+    }
+    .dsh-codex-image p { margin: 4px 0 0; color: var(--dsw-alias-label-secondary, GrayText); }
+    .dsh-codex-image img {
+      display: block;
+      margin-top: 8px;
+      border-radius: 8px;
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      max-height: min(280px, 34vh);
+      object-fit: contain;
+    }
+    .dsh-codex-image a { display: inline-block; color: inherit; margin-top: 7px; text-underline-offset: 3px; }
+    .dsh-codex-image-gallery { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; }
+    .dsh-codex-image-gallery figure { margin: 0; min-width: 0; }
+    .dsh-codex-image-gallery img { max-width: min(220px, 100%); max-height: min(200px, 27vh); }
+  `
+
+  function CodexImagePreview({ attachment, loadImage, number }) {
+    const [preview, setPreview] = useState()
+    useEffect(() => {
+      let active = true
+      setPreview(undefined)
+      void Promise.resolve().then(() => loadImage(attachment)).then(url => {
+        if (active) setPreview(typeof url === 'string' && url.startsWith('blob:') ? url : false)
+      }, () => { if (active) setPreview(false) })
+      return () => { active = false }
+    }, [attachment, loadImage])
+
+    if (preview === undefined) return element('p', { role: 'status' }, '正在读取图片…')
+    if (preview === false) return element('p', { role: 'status' }, '无法读取这张图片。')
+    const image = number === undefined ? 'Codex 生成的图片' : `Codex 图片 ${number}`
+    const name = number === undefined ? 'codex-image' : `codex-image-${number}`
+    return element(number === undefined ? 'div' : 'figure', null,
+      element('img', { src: preview, alt: image, width: attachment.width, height: attachment.height,
+        onError: () => setPreview(false) }),
+      element('a', { href: preview, download: `${name}.${imageExtension[attachment.mediaType]}` },
+        number === undefined ? '下载图片' : `下载第 ${number} 张`),
+    )
+  }
+
+  function readImageResult(block) {
+    if (!block) return undefined
+    let value = block.meta
+    if (block.isError) {
+      if (block.error?.code !== 'ABORTED') return undefined
+      const marker = block.content?.find(item => item.type === 'text' && item.text.startsWith(partialImageResult))
+      if (!marker || marker.text.length > 8192) return undefined
+      try { value = { ...JSON.parse(marker.text.slice(partialImageResult.length)), stopReason: 'ABORTED' } }
+      catch { return undefined }
+    } else if (value?.attachment) {
+      value = { attachments: [value.attachment], requested: 1 }
+    }
+    const parsed = storedImageResult.safeParse(value)
+    return parsed.success ? parsed.data : undefined
+  }
+
+  function CodexImageToolView({ phase, block, loadImage, toolName }) {
+    const settled = phase === 'result' ? block : undefined
+    const result = useMemo(() => readImageResult(settled), [settled?.meta, settled?.isError, settled?.content, settled?.error?.code])
+    const editing = toolName === 'codex_edit_image'
+    const title = editing ? 'Codex 图生图' : 'Codex 生图'
+    const error = phase === 'result' && block.isError ? block.error?.code : undefined
+    let body
+    if (result) {
+      const gallery = result.requested > 1
+      const done = result.attachments.length
+      const reason = Object.hasOwn(imageErrors, result.stopReason) ? imageErrors[result.stopReason] : undefined
+      body = element('div', null,
+        gallery ? element('p', { role: 'status' }, `已保存 ${done} / ${result.requested} 张${reason ? ' · ' + reason : ''}`)
+          : reason ? element('p', { role: 'status' }, reason) : null,
+        element('div', { className: gallery ? 'dsh-codex-image-gallery' : undefined },
+          ...result.attachments.map((attachment, index) => element(CodexImagePreview, {
+            key: `${index}-${attachment.attachmentId}`, attachment, loadImage, number: gallery ? index + 1 : undefined,
+          }))),
+      )
+    } else if (phase === 'result' && block.isError) {
+      const message = Object.hasOwn(imageErrors, error) ? imageErrors[error] : '图片生成失败。'
+      body = element('p', { role: 'status' }, message)
+    } else if (phase === 'result') {
+      body = element('p', { role: 'status' }, '无法读取这张图片。')
+    } else {
+      const pending = editing ? '正在编辑图片…' : '正在生成图片…'
+      body = element('p', { role: 'status' }, phase === 'start' ? pending : '准备图片请求…')
+    }
+    return element('section', { className: 'dsh-codex-image', 'aria-label': title },
+      element('style', null, imageStyles),
+      element('strong', null, title),
+      body,
+    )
+  }
+
   return { name: 'codex-responses-client', inject: ['remote', 'remoteAccess', 'slots'], async apply(ctx) {
     if (!ctx.remote.$host.isLoopback) return
     await ctx.remote.$mount(contribution)
     ctx.inject(['remote.codexResponses'], remoteCtx => {
+      for (const key of ['codex_generate_image', 'codex_edit_image']) {
+        remoteCtx.slots.inject('tool.call.toolview', () => remoteCtx.slots.register({
+          name: 'tool.call.toolview', key,
+        }, CodexImageToolView))
+      }
       const api = {
         status: () => remoteCtx.remote.codexResponses.status(),
         login: signal => remoteCtx.remote.codexResponses.login(signal),

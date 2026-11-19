@@ -21,7 +21,10 @@ test('client bundle mounts the same strict Remote contracts as the Host', async 
   const client = await loadClient()
   let mounted, injected
   await client.apply({ remote: { $host: { isLoopback: true }, async $mount(contribution) { mounted = contribution } },
-    inject(keys, register) { injected = keys; register({ remote: { codexResponses: {} }, remoteAccess: { whenAccess() {} } }) },
+    inject(keys, register) {
+      injected = keys
+      register({ remote: { codexResponses: {} }, remoteAccess: { whenAccess() {} }, slots: { inject() {} } })
+    },
   })
   assert.deepEqual(Array.from(injected), ['remote.codexResponses'])
   assert.deepEqual(Array.from(mounted.descriptors, descriptor => descriptor.id), TYPERT.invocations.map(method => method.id))
@@ -53,12 +56,106 @@ test('Codex registers only a top-level Settings section once status access is gr
     }) },
   })
 
-  assert.deepEqual(entries, [])
+  assert.deepEqual(entries.map(({ key }) => key), ['codex_generate_image', 'codex_edit_image'])
   grantAccess()
-  assert.deepEqual(slots, ['settings.section', 'shell.overlay', 'conversation.session.header.utilities'])
+  assert.deepEqual(slots, ['tool.call.toolview', 'tool.call.toolview', 'settings.section', 'shell.overlay', 'conversation.session.header.utilities'])
   assert.deepEqual(entries.filter(entry => entry.name.startsWith('settings.')).map(({ name, id, label }) => ({ name, id, label })), [
     { name: 'settings.section', id: 'codex-responses', label: 'ChatGPT Codex' },
   ])
+})
+
+test('Codex image tool has its own keyed pending, failed, and durable downloaded-image view', async () => {
+  let preview
+  let effect
+  const client = await loadClient({ react: {
+    createElement(type, props, ...children) { return { type, props, children } },
+    useEffect(callback) { effect = callback },
+    useMemo(compute) { return compute() },
+    useState() { return [preview, value => { preview = value }] },
+  } })
+  let registration
+  let View
+  let EditView
+  await client.apply({ remote: { $host: { isLoopback: true }, async $mount() {} },
+    inject(_keys, setup) { setup({
+      remote: { codexResponses: {} },
+      remoteAccess: { whenAccess() {} },
+      slots: { inject(_name, register) { register() }, register(entry, render) {
+        if (entry.key === 'codex_generate_image') {
+          registration = entry
+          View = render
+        }
+        if (entry.key === 'codex_edit_image') EditView = render
+      } },
+    }) },
+  })
+  assert.equal(registration.name, 'tool.call.toolview')
+  assert.equal(registration.children, undefined)
+  assert.match(JSON.stringify(View({ phase: 'start' })), /正在生成图片/)
+  const failed = View({ phase: 'result', block: {
+    isError: true, error: { code: 'CODEX_IMAGE_LIMIT' }, content: [{ type: 'text', text: 'private detail' }],
+  } })
+  assert.match(JSON.stringify(failed), /额度/)
+  assert.doesNotMatch(JSON.stringify(failed), /private detail/)
+  for (const [code, expected] of [['CODEX_RELOGIN_REQUIRED', /重新登录/], ['ABORTED_BEFORE_DISPATCH', /已取消/],
+    ['interrupted', /中断/]]) {
+    assert.match(JSON.stringify(View({ phase: 'result', block: { isError: true, error: { code } } })), expected)
+  }
+
+  const attachment = { attachmentId: 'saved-image-1', mediaType: 'image/jpeg', width: 1024, height: 1024, bytes: 256 }
+  const props = { phase: 'result', block: { meta: { attachment }, isError: false },
+    async loadImage(ref) {
+      assert.deepEqual({ ...ref }, attachment)
+      return 'blob:preview'
+    },
+  }
+  const find = (node, predicate) => {
+    if (node == null || typeof node !== 'object') return undefined
+    if (predicate(node)) return node
+    for (const child of node.children ?? []) {
+      const match = find(child, predicate)
+      if (match) return match
+    }
+  }
+  const image = find(View(props), node => typeof node.type === 'function')
+  assert.match(JSON.stringify(image.type(image.props)), /正在读取图片/)
+  effect()
+  await new Promise(resolve => setImmediate(resolve))
+  const ready = image.type(image.props)
+  assert.equal(find(ready, node => node.type === 'img').props.src, 'blob:preview')
+  const download = find(ready, node => node.type === 'a')
+  assert.equal(download.props.href, 'blob:preview')
+  assert.equal(download.props.download, 'codex-image.jpg')
+  assert.match(JSON.stringify(EditView({ phase: 'start', toolName: 'codex_edit_image' })), /正在编辑图片/)
+
+  const collect = (node, elements = []) => {
+    if (node == null || typeof node !== 'object') return elements
+    if (typeof node.type === 'function') elements.push(node)
+    for (const child of node.children ?? []) collect(child, elements)
+    return elements
+  }
+  const batch = { requested: 3, attachments: [attachment, { ...attachment, attachmentId: 'saved-image-2' }] }
+  const cancelled = EditView({ ...props, toolName: 'codex_edit_image', block: {
+    isError: true, error: { code: 'ABORTED' },
+    content: [{ type: 'text', text: 'Codex saved image result: ' + JSON.stringify(batch) }],
+  } })
+  assert.match(JSON.stringify(cancelled), /2 \/ 3/)
+  assert.match(JSON.stringify(cancelled), /已取消/)
+  const pictures = collect(cancelled)
+  assert.deepEqual(pictures.map(node => node.props.number), [1, 2])
+  const numbered = find(pictures[1].type(pictures[1].props), node => node.type === 'a')
+  assert.equal(numbered.props.download, 'codex-image-2.jpg')
+
+  const complete = View({ ...props, block: { isError: false, meta: { ...batch, requested: 2 } } })
+  assert.equal(collect(complete).length, 2)
+
+  const missing = find(View({ ...props, async loadImage() { throw new Error('mount path secret') } }),
+    node => typeof node.type === 'function')
+  missing.type(missing.props)
+  effect()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.match(JSON.stringify(missing.type(missing.props)), /无法读取/)
+  assert.doesNotMatch(JSON.stringify(missing.type(missing.props)), /mount path secret/)
 })
 
 async function mountFloating(remote, hooks = {}) {
