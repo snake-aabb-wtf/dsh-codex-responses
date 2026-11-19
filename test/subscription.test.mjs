@@ -76,6 +76,22 @@ test('transient errors keep the last result, but an account change clears it', a
   await stream.return()
 })
 
+test('quota polls send a frame even when the last reading is unchanged', async t => {
+  let calls = 0
+  const { watch, controller } = fixture(async () => {
+    if (++calls === 1) return Response.json({ rate_limit: { primary_window: window(12) } })
+    return new Response(null, { status: 503 })
+  })
+  const stream = watch('quota')
+  const fallback = setTimeout(() => controller.abort(), 500)
+  t.after(async () => { clearTimeout(fallback); controller.abort(); await stream.return() })
+  assert.equal((await stream.next()).value.status, 'ready')
+  const stale = (await stream.next()).value
+  assert.equal(stale.status, 'stale')
+  assert.deepEqual(await stream.next(), { done: false, value: stale })
+  assert.equal(calls, 3)
+})
+
 test('subscription cancellation aborts an in-flight usage request', async () => {
   const started = Promise.withResolvers()
   const { watch, controller } = fixture(async (_url, { signal }) => {

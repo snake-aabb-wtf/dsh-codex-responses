@@ -135,12 +135,18 @@ export function createSubscriptionMonitor({ credentials, oauth, fetch = globalTh
       if (signal.aborted) return
       if (loginSignal.aborted) continue
       const next = JSON.stringify(view)
-      if (next !== signature) {
+      // Every quota poll confirms the subscription is alive, even with a cached reading.
+      if (kind === 'quota' || next !== signature) {
         signature = next
         yield view
       }
       const waiting = kind === 'account' ? AbortSignal.any([signal, wakeSignal]) : AbortSignal.any([signal, loginSignal])
-      await delay(interval, undefined, { signal: waiting }).catch(error => { if (!waiting.aborted) throw error })
+      const nextPoll = performance.now() + interval
+      // Wake after the cache lifetime, including when a timer fires slightly early.
+      do {
+        await delay(Math.ceil(nextPoll - performance.now()), undefined, { signal: waiting })
+          .catch(error => { if (!waiting.aborted) throw error })
+      } while (!waiting.aborted && performance.now() < nextPoll)
     }
   }
 

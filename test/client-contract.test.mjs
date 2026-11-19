@@ -5,10 +5,10 @@ import { runInNewContext } from 'node:vm'
 import { z } from 'zod'
 import { TYPERT } from '../src/typert.mjs'
 
-async function loadClient({ react = {}, navigator } = {}) {
+async function loadClient({ react = {}, navigator, timers } = {}) {
   let client
   const source = await readFile(new URL('../src/client.cjs', import.meta.url), 'utf8')
-  runInNewContext(source, { AbortController, navigator, window: {
+  runInNewContext(source, { AbortController, navigator, ...timers, window: {
     innerWidth: 1000, innerHeight: 800,
     __ModuleLoader__: { load({ factory }) {
       client = factory(id => id === 'zod' ? { z } : react)
@@ -158,8 +158,8 @@ test('Codex image tool has its own keyed pending, failed, and durable downloaded
   assert.doesNotMatch(JSON.stringify(missing.type(missing.props)), /mount path secret/)
 })
 
-async function mountFloating(remote, hooks = {}) {
-  const client = await loadClient({ react: {
+async function mountFloating(remote, hooks = {}, timers) {
+  const client = await loadClient({ timers, react: {
     createElement(type, props, ...children) { return { type, props, children } },
     useEffect() {},
     useRef(initial) { return { current: initial } },
@@ -286,6 +286,78 @@ test('collapsed summaries expose compact labels, two quota values and a separate
   assert.deepEqual(texts(summaries[1]), ['Plus'])
   assert.deepEqual(texts(summaries[2]), ['5 小时', '68%', '7 天', '39%', '上次'])
 })
+
+for (const interruption of ['stream ended', 'stream stalled']) {
+  test(`a mounted quota pane reconnects after its ${interruption}`, async () => {
+    const ready = { kind: 'quota', status: 'ready', windows: [
+      { remaining: 52, durationSeconds: 604_800, resetsAt: null },
+    ], updatedAt: 1_900_000_000_000 }
+    const refreshed = { ...ready, updatedAt: ready.updatedAt + 60_000, windows: [{ ...ready.windows[0], remaining: 51 }] }
+    const pending = new Map()
+    const timers = {
+      setTimeout(callback, ms) {
+        const id = Symbol()
+        pending.set(id, { callback, ms })
+        return id
+      },
+      clearTimeout(id) { pending.delete(id) },
+    }
+    const fire = ms => {
+      const timer = [...pending].find(([, entry]) => entry.ms === ms)
+      assert.ok(timer, `Expected a timer for ${ms} ms`)
+      const [id, { callback }] = timer
+      pending.delete(id)
+      callback()
+    }
+    let value
+    let effect
+    const signals = []
+    const { render } = await mountFloating({
+      async floatingPreferences() {
+        return { ok: true, value: { enabled: true, position: null,
+          items: { apiCost: false, account: false, quota: true } } }
+      },
+      async *subscription(_kind, _surface, signal) {
+        signals.push(signal)
+        const first = signals.length === 1
+        yield first ? ready : refreshed
+        if (first && interruption === 'stream ended') return
+        await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))
+      },
+    }, {
+      useEffect(setup) { effect = setup },
+      useState(initial) {
+        return [initial ?? value, next => { value = typeof next === 'function' ? next(value) : next }]
+      },
+    }, timers)
+
+    const [pane] = render().children.flat()
+    const [quota] = pane.children
+    quota.type({ ...quota.props, collapsed: true })
+    const cleanup = effect()
+    try {
+      await nextTurn()
+      if (interruption === 'stream stalled') {
+        assert.equal(value.status, 'ready')
+        fire(90_000)
+        await nextTurn()
+        assert.equal(signals[0].aborted, true)
+      }
+      assert.equal(value.status, 'stale')
+      assert.equal(value.windows[0].remaining, 52)
+      assert.ok(descendants(quota.type({ ...quota.props, collapsed: true })).includes('上次'))
+      fire(3000)
+      await nextTurn()
+      assert.equal(signals.length, 2)
+      assert.equal(value, refreshed)
+    } finally {
+      cleanup()
+      await nextTurn()
+    }
+    assert.equal(pending.size, 0)
+    assert.equal(signals.at(-1).aborted, true)
+  })
+}
 
 test('account details and the collapsed summary use the same human-readable plan labels', async () => {
   let plan

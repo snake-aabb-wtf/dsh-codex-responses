@@ -591,25 +591,51 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     )
   }
 
+  const quotaSilenceMs = 90_000
+  const subscriptionRetryMs = 3000
+
   function useSubscription(observe, kind) {
     const [value, setValue] = useState()
     useEffect(() => {
-      const controller = new AbortController()
+      let stopped = false
+      let controller
+      let silence
       let retry
       async function follow() {
+        const attempt = new AbortController()
+        controller = attempt
+        const expectQuota = () => {
+          if (kind !== 'quota') return
+          clearTimeout(silence)
+          silence = setTimeout(() => attempt.abort(), quotaSilenceMs)
+        }
+        expectQuota()
         try {
-          for await (const frame of observe(kind, controller.signal)) {
-            if (controller.signal.aborted) break
-            if (frame.kind === kind) setValue(frame)
+          for await (const frame of observe(kind, attempt.signal)) {
+            if (attempt.signal.aborted) break
+            if (frame.kind === kind) {
+              expectQuota()
+              setValue(frame)
+            }
           }
         } catch {
-          if (controller.signal.aborted) return
-          setValue(null)
-          retry = setTimeout(follow, 3000)
+          // Reconnect after transport errors and normal termination.
+        } finally {
+          clearTimeout(silence)
+          if (!stopped) {
+            setValue(previous => previous?.kind === 'quota' && previous.windows.length
+              ? { ...previous, status: 'stale' } : null)
+            retry = setTimeout(follow, subscriptionRetryMs)
+          }
         }
       }
       void follow()
-      return () => { controller.abort(); clearTimeout(retry) }
+      return () => {
+        stopped = true
+        controller?.abort()
+        clearTimeout(silence)
+        clearTimeout(retry)
+      }
     }, [observe, kind])
     return value
   }
