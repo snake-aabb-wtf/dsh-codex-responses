@@ -1,5 +1,7 @@
 # DSH Codex Responses
 
+简体中文 · [English](README.en.md)
+
 在 DeepSeek Harness Desktop `0.2.2-rc.3` 中使用 ChatGPT 订阅的 Codex 模型。插件负责设备码登录、OAuth 刷新和模型目录，DSH 负责对话、审批和工具执行。
 
 ## 安装与登录（Windows Desktop）
