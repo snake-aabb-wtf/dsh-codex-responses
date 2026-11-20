@@ -597,7 +597,6 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     const clamp = (point, bounds, margin = 8) => ({ x: Math.max(margin, Math.min(point.x, bounds.right - margin)),
       y: Math.max(8, Math.min(point.y, bounds.bottom)) })
     const point = preview ?? position
-    const dragMargin = collapsed || position?.edge ? 0 : 8
     const dragPoint = (event, handle) => ({ x: handle.left + event.clientX - handle.x,
       y: handle.top + event.clientY - handle.y })
     const crossedThreshold = (event, handle) => Math.hypot(event.clientX - handle.x, event.clientY - handle.y) >= 5
@@ -614,7 +613,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       handle.moved ||= crossedThreshold(event, handle)
       if (handle.moved && handle.movable) {
         stopAnimation()
-        setPreview(clamp(dragPoint(event, handle), limits(), dragMargin))
+        setPreview(clamp(dragPoint(event, handle), limits(), 0))
       }
     }
     const finishDrag = (event, commit) => {
@@ -625,11 +624,10 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       skipPointerClick.current = moved || !commit
       if (commit && moved && handle.movable) {
         const bounds = limits()
-        const released = clamp(dragPoint(event, handle), bounds, dragMargin)
-        // Leave space for free placement even when the capsule is nearly as wide as the window.
+        const released = clamp(dragPoint(event, handle), bounds, 0)
+        // Leave space for free placement even when the overlay is nearly as wide as the viewport.
         const reach = Math.min(dockDistance, bounds.right / 3)
-        const edge = (collapsed || position?.edge === 'left') && released.x <= reach ? 'left'
-          : (collapsed || position?.edge === 'right') && bounds.right - released.x <= reach ? 'right' : undefined
+        const edge = released.x <= reach ? 'left' : bounds.right - released.x <= reach ? 'right' : undefined
         const destination = edge ? { x: edge === 'left' ? 0 : bounds.right, y: released.y, edge }
           : clamp(released, bounds)
         const changed = destination.x !== handle.left || destination.y !== handle.top || edge !== position?.edge
@@ -662,8 +660,8 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': 'ChatGPT Subscription',
       'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined, 'data-edge': preview ? undefined : position?.edge,
       'data-portrait': portrait,
-      style: point ? { '--codex-float-x': `${Math.max(preview ? dragMargin : 8, point.x)}px`,
-        '--codex-float-y': `${Math.max(8, point.y)}px`, '--codex-float-margin': preview ? `${dragMargin}px` : undefined } : undefined },
+      style: point ? { '--codex-float-x': `${preview ? point.x : Math.max(8, point.x)}px`,
+        '--codex-float-y': `${Math.max(8, point.y)}px`, '--codex-float-margin': preview ? '0px' : undefined } : undefined },
       element('style', null, floatingStyles + costStyles + subscriptionStyles),
       element('button', { type: 'button', className: 'codex-float-toggle',
         'aria-label': collapsed ? '展开悬浮窗' : '折叠悬浮窗',

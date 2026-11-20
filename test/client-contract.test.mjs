@@ -259,13 +259,19 @@ test('releasing a drag saves the final coordinates without an intermediate point
   assert.equal(moved?.y, 100)
 })
 
-test('releasing the capsule near a side saves its edge and vertical position', async () => {
-  for (const [position, releaseLeft, collapsed, expected] of [
+test('releasing either floating window shape near a side saves its edge and vertical position', async () => {
+  for (const [position, releaseLeft, collapsed, expected, width = 250] of [
     [{ x: 100, y: 40 }, 24, true, { x: 0, y: 55, edge: 'left' }],
     [{ x: 300, y: 40 }, 726, true, { x: 750, y: 55, edge: 'right' }],
     [{ x: 0, y: 40, edge: 'left' }, 25, true, { x: 25, y: 55 }],
+    [{ x: 100, y: 40 }, 24, false, { x: 0, y: 55, edge: 'left' }],
+    [{ x: 300, y: 40 }, 726, false, { x: 750, y: 55, edge: 'right' }],
     [{ x: 0, y: 40, edge: 'left' }, 0, false, { x: 0, y: 55, edge: 'left' }],
-    [{ x: 100, y: 40 }, 15, false, { x: 15, y: 55 }],
+    [{ x: 0, y: 40, edge: 'left' }, 25, false, { x: 25, y: 55 }],
+    [{ x: 750, y: 40, edge: 'right' }, 24, false, { x: 0, y: 55, edge: 'left' }],
+    [{ x: 8, y: 40 }, 4, false, { x: 0, y: 55, edge: 'left' }, 984],
+    [{ x: 8, y: 40 }, 12, false, { x: 16, y: 55, edge: 'right' }, 984],
+    [{ x: 0, y: 40, edge: 'left' }, 8, false, { x: 8, y: 55 }, 984],
   ]) {
     const { render } = await mountFloating({
       async floatingPreferences() { return { ok: true, value: { enabled: true, position, items: { apiCost: true } } } },
@@ -273,7 +279,7 @@ test('releasing the capsule near a side saves its edge and vertical position', a
     const shell = render()
     let moved
     const frame = shell.type({ ...shell.props, collapsed, onMove: point => { moved = { ...point } } })
-    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width: 250 }) }
+    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width }) }
     const handle = frame.children.find(node => node.props?.onPointerDown).props
     const pointer = { button: 0, pointerId: 1, clientX: position.x + 15, clientY: 50, currentTarget: { setPointerCapture() {} } }
     handle.onPointerDown(pointer)
