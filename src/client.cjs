@@ -1260,7 +1260,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       remoteCtx.remoteAccess.whenAccess('codexResponses/status', () => {
         const disposers = [
           remoteCtx.slots.inject('settings.section', () => remoteCtx.slots.register({
-            name: 'settings.section', id: 'codex-responses', order: 30, label: 'ChatGPT Codex',
+            name: 'settings.section', id: 'codex-responses', order: 30, label: subscriptionName,
             inject: () => ({ api, floating, observeSubscription }),
           }, CodexPanel)),
           remoteCtx.slots.inject('shell.overlay', () => remoteCtx.slots.register({

@@ -6,12 +6,12 @@
 
 ## 安装与登录（Windows Desktop）
 
-1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.9.tgz`。
+1. 在本目录运行 `npm pack`，生成包含源码和客户端 bundle 的 `dsh-codex-responses-0.5.10.tgz`。
 2. 在 Desktop 的 **插件 → 安装插件** 中选择本地 `.tgz`，或用 Desktop 自带的 CLI 运行 `dsh plugin --profile desktop add <tgz的绝对路径>`。
-3. 打开 **设置 → ChatGPT Codex**，点 **使用设备码登录**。复制设备码，点 **打开 OpenAI 验证页面**，在浏览器中输入设备码并授权。
+3. 打开 **设置 → ChatGPT Subscription**，点 **使用设备码登录**。复制设备码，点 **打开 OpenAI 验证页面**，在浏览器中输入设备码并授权。
 4. 在会话的模型选择器中，从 **ChatGPT Subscription** 分组选择模型和推理档位。
 
-登录后，插件约每五分钟同步一次 Codex 模型目录。**设置 → ChatGPT Codex** 显示模型数量和目录来源，包括在线目录、当前账号上次同步的目录和内置目录。
+登录后，插件约每五分钟同步一次 Codex 模型目录。**设置 → ChatGPT Subscription** 显示模型数量和目录来源，包括在线目录、当前账号上次同步的目录和内置目录。
 
 ## 用 Codex 订阅生图
 
@@ -23,7 +23,7 @@
 
 ## 悬浮窗与 API 标价估算
 
-登录后，**设置 → ChatGPT Codex** 的登录管理卡显示邮箱、套餐、已用和剩余额度以及重置时间。在同一页面开启 **悬浮窗**，并从 **显示内容** 里勾选要查看的项目。悬浮窗默认关闭，API 标价估算默认勾选。
+登录后，**设置 → ChatGPT Subscription** 的登录管理卡显示邮箱、套餐、已用和剩余额度以及重置时间。在同一页面开启 **悬浮窗**，并从 **显示内容** 里勾选要查看的项目。悬浮窗默认关闭，API 标价估算默认勾选。
 
 - **账号与套餐**显示邮箱和套餐名称。
 - **Codex 额度**显示各用量窗口的剩余百分比和重置时间。额度约每分钟刷新一次，悬浮窗展开和折叠时共用同一读数。缓存读数标为「上次」。
@@ -37,7 +37,7 @@
 
 DSH 凭据服务以 `dsh-codex/codex-responses` 为键保存插件的 OAuth grant，默认存放在 `$DSH_HOME/.credentials.yaml`。
 
-卸载时，在 **设置 → ChatGPT Codex** 点击 **退出登录** 清除该插件的登录凭据，再从 **插件** 页卸载。
+卸载时，在 **设置 → ChatGPT Subscription** 点击 **退出登录** 清除该插件的登录凭据，再从 **插件** 页卸载。
 
 ## 开发验证
 

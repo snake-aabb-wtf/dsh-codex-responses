@@ -69,7 +69,7 @@ test('Codex registers only a top-level Settings section once status access is gr
   grantAccess()
   assert.deepEqual(slots, ['tool.call.toolview', 'tool.call.toolview', 'settings.section', 'shell.overlay', 'conversation.session.header.utilities'])
   assert.deepEqual(entries.filter(entry => entry.name.startsWith('settings.')).map(({ name, id, label }) => ({ name, id, label })), [
-    { name: 'settings.section', id: 'codex-responses', label: 'ChatGPT Codex' },
+    { name: 'settings.section', id: 'codex-responses', label: 'ChatGPT Subscription' },
   ])
 })
 
