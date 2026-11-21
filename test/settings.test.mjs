@@ -111,14 +111,16 @@ test('floating preferences restore an edge through storage and clear it on move 
   const open = () => createFloatingPreferences({ readPreferences: () => stored, writePreferences: next => { stored = next } })
   const floating = open()
   assert.deepEqual((await floating.read()).position, { x: 32, y: 51 })
-  for (const edge of ['left', 'right']) {
-    const position = { x: edge === 'left' ? 0 : 740, y: 51, edge }
+  for (const position of [
+    { x: 0, y: 51, edge: 'left' }, { x: 740, y: 51, edge: 'right' },
+    { x: 100, y: 40, edge: 'top' }, { x: 100, y: 590, edge: 'bottom' },
+  ]) {
     await floating.update({ position })
     assert.deepEqual((await open().read()).position, position)
   }
   assert.deepEqual((await floating.update({ position: { x: 50, y: 80 } })).position, { x: 50, y: 80 })
   assert.equal((await floating.update({ position: null })).position, null)
-  stored = { enabled: true, position: { x: 50, y: 80, edge: 'top' } }
+  stored = { enabled: true, position: { x: 50, y: 80, edge: 'corner' } }
   assert.deepEqual((await open().read()).position, { x: 50, y: 80 })
 })
 

@@ -10,7 +10,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   const deviceSchema = z.strictObject({ type: z.literal('device'), url: z.literal(deviceURL), code: z.string() })
   const loginSchema = z.discriminatedUnion('type', [statusSchema, deviceSchema])
   const position = z.strictObject({ x: z.number().min(0).max(100_000), y: z.number().min(0).max(100_000),
-    edge: z.enum(['left', 'right']).optional() }).nullable()
+    edge: z.enum(['left', 'right', 'top', 'bottom']).optional() }).nullable()
   const items = z.strictObject({ apiCost: z.boolean(), account: z.boolean(), quota: z.boolean() })
   const preferences = z.strictObject({ enabled: z.boolean(), position, items })
   const preferencePatch = preferences.partial().extend({ items: items.partial().optional() })
@@ -216,8 +216,11 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
 
   const floatingStyles = `
     .dsh-codex-float {
+      --codex-float-top-inset: 0px;
+      --codex-float-margin: 8px;
+      --codex-float-top: max(calc(var(--codex-float-top-inset) + var(--codex-float-margin)), var(--codex-float-y, 78px));
       position: fixed;
-      top: var(--codex-float-y, 78px);
+      top: var(--codex-float-top);
       right: 24px;
       width: max-content;
       max-width: calc(100vw - 16px);
@@ -225,7 +228,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       grid-template-columns: minmax(0, 1fr);
       align-content: start;
       transform: translate(var(--codex-float-shift-x, max(0px, calc(100% + 32px - 100vw))),
-        min(0px, calc(100vh - var(--codex-float-y, 78px) - 8px - 100%)));
+        var(--codex-float-shift-y, min(0px, calc(100vh - var(--codex-float-top) - var(--codex-float-margin) - 100%))));
       box-sizing: border-box;
       overflow: hidden;
       color: var(--dsw-alias-label-primary, CanvasText);
@@ -239,13 +242,17 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       font-variant-numeric: tabular-nums;
       --codex-float-muted: var(--dsw-alias-label-secondary, GrayText);
     }
+    :root[data-windows-titlebar]:not([data-fullscreen]) .dsh-codex-float {
+      --codex-float-top-inset: var(--dsh-windows-titlebar-height, 0px);
+    }
     .dsh-codex-float[data-positioned] {
       left: var(--codex-float-x); right: auto;
-      --codex-float-shift-x: min(0px, calc(100vw - var(--codex-float-x) - var(--codex-float-margin, 8px) - 100%));
+      --codex-float-shift-x: min(0px, calc(100vw - var(--codex-float-x) - var(--codex-float-margin) - 100%));
     }
-    .dsh-codex-float[data-edge] { --codex-float-shift-x: 0px; }
-    .dsh-codex-float[data-edge='left'] { left: 0; right: auto; }
-    .dsh-codex-float[data-edge='right'] { left: auto; right: 0; }
+    .dsh-codex-float[data-edge='left'] { left: 0; right: auto; --codex-float-shift-x: 0px; }
+    .dsh-codex-float[data-edge='right'] { left: auto; right: 0; --codex-float-shift-x: 0px; }
+    .dsh-codex-float[data-edge='top'] { top: var(--codex-float-top-inset); --codex-float-shift-y: 0px; }
+    .dsh-codex-float[data-edge='bottom'] { top: auto; bottom: 0; --codex-float-shift-y: 0px; }
     .dsh-codex-float .codex-float-toggle {
       position: absolute; grid-area: 1 / 1 / 2 / 2; z-index: 1; inset: 0 0 auto; height: 36px;
       display: flex; align-items: center; gap: 7px;
@@ -279,6 +286,9 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       content: ''; width: 5px; height: 5px; margin-top: -3px;
       border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
     }
+    .dsh-codex-float[data-collapsed][data-edge='bottom'] .codex-float-cue::before {
+      margin-top: 3px; transform: rotate(225deg);
+    }
     .dsh-codex-float .codex-float-view {
       grid-area: 1 / 1; align-self: start; min-width: 0;
       transition: opacity 84ms ease;
@@ -290,7 +300,9 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     }
     .dsh-codex-float .codex-float-details::before { content: ''; display: block; height: 36px; }
     .dsh-codex-float .codex-float-details:not([aria-hidden]) { transition: opacity 112ms ease 48ms; }
-    .dsh-codex-float .codex-float-details-body { max-height: calc(100vh - 54px); overflow: auto; }
+    .dsh-codex-float .codex-float-details-body {
+      max-height: max(0px, calc(100vh - var(--codex-float-top-inset) - 54px)); overflow: auto;
+    }
     .dsh-codex-float .codex-float-metrics {
       min-height: 36px; box-sizing: border-box;
       display: flex; flex-wrap: wrap; align-content: center; align-items: center;
@@ -327,8 +339,8 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     .dsh-codex-float[data-portrait] .codex-float-portrait { min-width: min(82px, calc(100vw - 18px)); }
     .dsh-codex-float .codex-float-portrait:not([aria-hidden]) { transition: opacity 96ms ease 64ms; }
     .dsh-codex-float .codex-float-portrait-metrics {
-      box-sizing: border-box; width: 82px; min-height: min(104px, calc(100vh - 18px));
-      max-height: calc(100vh - 18px); padding: 26px 6px;
+      box-sizing: border-box; width: 82px; min-height: min(104px, calc(100vh - var(--codex-float-top-inset) - 18px));
+      max-height: calc(100vh - var(--codex-float-top-inset) - 18px); padding: 26px 6px;
       display: flex; flex-direction: column; justify-content: center; gap: 6px;
       text-align: center; font-size: 12px; line-height: 1.4; overflow: hidden;
       pointer-events: none; user-select: none;
@@ -529,10 +541,32 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   const reducedMotion = '(prefers-reduced-motion: reduce)'
   const dockDistance = 24
   const dockEasing = 'cubic-bezier(.22, .55, .42, 1)'
+  const isSideEdge = edge => edge === 'left' || edge === 'right'
   function floatingGeometry(node) {
-    const { left, top, width, height } = node.getBoundingClientRect()
-    return { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
-      borderRadius: window.getComputedStyle(node).borderRadius, right: 'auto', transform: 'none' }
+    const { left, top, bottom, width, height } = node.getBoundingClientRect()
+    return { left, top, bottom, width, height, borderRadius: window.getComputedStyle(node).borderRadius }
+  }
+  function floatingKeyframe({ left, top, bottom, width, height, borderRadius }, anchorBottom) {
+    return { left: `${left}px`, right: 'auto', top: anchorBottom ? 'auto' : `${top}px`,
+      bottom: anchorBottom ? `${window.innerHeight - bottom}px` : 'auto', width: `${width}px`, height: `${height}px`,
+      borderRadius, transform: 'none' }
+  }
+  function nearestDock({ x, y }, { right, top, bottom }, currentEdge) {
+    // Keep the middle available for free placement on each axis, even in small windows.
+    const sideReach = Math.min(dockDistance, right / 3)
+    const verticalReach = Math.min(dockDistance, (bottom - top) / 3)
+    let nearest = Infinity
+    let edge
+    for (const [candidate, gap, reach] of [
+      ['left', x, sideReach], ['right', right - x, sideReach],
+      ['top', y - top, verticalReach], ['bottom', bottom - y, verticalReach],
+    ]) {
+      if (reach > 0 && gap <= reach && (gap < nearest || (gap === nearest && candidate === currentEdge))) {
+        edge = candidate
+        nearest = gap
+      }
+    }
+    return edge
   }
 
   function FloatingWindow({ position, busy, collapsed, onToggle, onMove, summary, details }) {
@@ -546,7 +580,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     const drag = useRef(null)
     // A released pointer can still generate a click on the captured button.
     const skipPointerClick = useRef(false)
-    const portrait = collapsed ? position?.edge : undefined
+    const portrait = collapsed && isSideEdge(position?.edge) ? position.edge : undefined
     const horizontal = collapsed && !portrait
 
     const stopAnimation = () => {
@@ -574,7 +608,8 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       const node = frame.current
       const to = floatingGeometry(node)
       if (from.left !== to.left || from.top !== to.top || from.width !== to.width || from.height !== to.height || from.borderRadius !== to.borderRadius) {
-        animation.current = node.animate([from, to], { duration, easing })
+        const anchorBottom = position?.edge === 'bottom'
+        animation.current = node.animate([floatingKeyframe(from, anchorBottom), floatingKeyframe(to, anchorBottom)], { duration, easing })
       }
     }, [collapsed, position, preview])
 
@@ -590,12 +625,13 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     }, [])
 
     const limits = () => {
-      const view = portrait ? portraitView.current : collapsed ? summaryView.current : detailsView.current
-      const width = frame.current.getBoundingClientRect().width ?? (view?.offsetWidth ?? 0) + 2
-      return { right: Math.max(0, window.innerWidth - width), bottom: window.innerHeight - (view?.offsetHeight ?? 0) - 10 }
+      const node = frame.current
+      const { width, height } = node.getBoundingClientRect()
+      const top = Number.parseFloat(window.getComputedStyle(node).getPropertyValue('--codex-float-top-inset')) || 0
+      return { right: Math.max(0, window.innerWidth - width), top, bottom: Math.max(top, window.innerHeight - height) }
     }
     const clamp = (point, bounds, margin = 8) => ({ x: Math.max(margin, Math.min(point.x, bounds.right - margin)),
-      y: Math.max(8, Math.min(point.y, bounds.bottom)) })
+      y: Math.max(bounds.top + margin, Math.min(point.y, bounds.bottom - margin)) })
     const point = preview ?? position
     const dragPoint = (event, handle) => ({ x: handle.left + event.clientX - handle.x,
       y: handle.top + event.clientY - handle.y })
@@ -625,11 +661,13 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       if (commit && moved && handle.movable) {
         const bounds = limits()
         const released = clamp(dragPoint(event, handle), bounds, 0)
-        // Leave space for free placement even when the overlay is nearly as wide as the viewport.
-        const reach = Math.min(dockDistance, bounds.right / 3)
-        const edge = released.x <= reach ? 'left' : bounds.right - released.x <= reach ? 'right' : undefined
-        const destination = edge ? { x: edge === 'left' ? 0 : bounds.right, y: released.y, edge }
-          : clamp(released, bounds)
+        const edge = nearestDock(released, bounds, position?.edge)
+        const free = clamp(released, bounds)
+        const destination = edge ? {
+          x: edge === 'left' ? 0 : edge === 'right' ? bounds.right : free.x,
+          y: edge === 'top' ? bounds.top : edge === 'bottom' ? bounds.bottom : free.y,
+          edge,
+        } : free
         const changed = destination.x !== handle.left || destination.y !== handle.top || edge !== position?.edge
         if ((edge || portrait) && (preview || changed)) requestMotion(160, dockEasing)
         stopAnimation()
@@ -649,19 +687,24 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       if (!step || busy) return
       event.preventDefault()
       const edge = position?.edge
-      if ((edge === 'left' && step[0] < 0) || (edge === 'right' && step[0] > 0)) return
+      const side = isSideEdge(edge)
+      const acrossEdge = side ? step[0] : step[1]
+      if (acrossEdge < 0 && (edge === 'left' || edge === 'top')) return
+      if (acrossEdge > 0 && (edge === 'right' || edge === 'bottom')) return
       const { left, top } = frame.current.getBoundingClientRect()
       const destination = clamp({ x: left + step[0], y: top + step[1] }, limits())
       if (portrait && step[0]) requestMotion(160, dockEasing)
       stopAnimation()
-      onMove(edge && !step[0] ? { x: position.x, y: destination.y, edge } : destination)
+      if (edge && acrossEdge === 0) {
+        onMove(side ? { x: position.x, y: destination.y, edge } : { x: destination.x, y: position.y, edge })
+      } else onMove(destination)
     }
 
     return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': 'ChatGPT Subscription',
       'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined, 'data-edge': preview ? undefined : position?.edge,
       'data-portrait': portrait,
       style: point ? { '--codex-float-x': `${preview ? point.x : Math.max(8, point.x)}px`,
-        '--codex-float-y': `${Math.max(8, point.y)}px`, '--codex-float-margin': preview ? '0px' : undefined } : undefined },
+        '--codex-float-y': `${point.y}px`, '--codex-float-margin': preview ? '0px' : undefined } : undefined },
       element('style', null, floatingStyles + costStyles + subscriptionStyles),
       element('button', { type: 'button', className: 'codex-float-toggle',
         'aria-label': collapsed ? '展开悬浮窗' : '折叠悬浮窗',

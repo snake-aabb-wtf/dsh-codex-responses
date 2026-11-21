@@ -10,6 +10,7 @@ async function loadClient({ react = {}, navigator, timers } = {}) {
   const source = await readFile(new URL('../src/client.cjs', import.meta.url), 'utf8')
   runInNewContext(source, { AbortController, navigator, ...timers, window: {
     innerWidth: 1000, innerHeight: 800,
+    getComputedStyle() { return { getPropertyValue() { return '0px' } } },
     __ModuleLoader__: { load({ factory }) {
       client = factory(id => id === 'zod' ? { z } : react)
     } },
@@ -38,11 +39,11 @@ test('client bundle mounts the same strict Remote contracts as the Host', async 
   const floating = mounted.descriptors.find(descriptor => descriptor.method === 'floatingPreferences')
   const preferences = { enabled: true, items: { apiCost: true, account: false, quota: false }, position: { x: 0, y: 20 } }
   assert.deepEqual(floating.result.create().parse(preferences), preferences)
-  for (const edge of ['left', 'right']) {
+  for (const edge of ['left', 'right', 'top', 'bottom']) {
     const docked = { ...preferences, position: { ...preferences.position, edge } }
     assert.deepEqual(floating.result.create().parse(docked), docked)
   }
-  assert.equal(floating.result.create().safeParse({ ...preferences, position: { ...preferences.position, edge: 'top' } }).success, false)
+  assert.equal(floating.result.create().safeParse({ ...preferences, position: { ...preferences.position, edge: 'corner' } }).success, false)
 })
 
 test('Codex registers only a top-level Settings section once status access is granted', async () => {
@@ -247,7 +248,7 @@ test('releasing a drag saves the final coordinates without an intermediate point
   const shell = render()
   let moved
   const window = shell.type({ ...shell.props, onMove: point => { moved = point } })
-  window.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40 }) }
+  window.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40, width: 250, height: 200 }) }
   const handle = window.children.find(node => node.props?.onPointerDown).props
   const pointer = { button: 0, pointerId: 1, clientX: 40, clientY: 50, currentTarget: { setPointerCapture() {} } }
   handle.onPointerDown(pointer)
@@ -279,12 +280,61 @@ test('releasing either floating window shape near a side saves its edge and vert
     const shell = render()
     let moved
     const frame = shell.type({ ...shell.props, collapsed, onMove: point => { moved = { ...point } } })
-    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width }) }
+    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width, height: collapsed ? 38 : 200 }) }
     const handle = frame.children.find(node => node.props?.onPointerDown).props
     const pointer = { button: 0, pointerId: 1, clientX: position.x + 15, clientY: 50, currentTarget: { setPointerCapture() {} } }
     handle.onPointerDown(pointer)
     handle.onPointerUp({ ...pointer, clientX: releaseLeft + 15, clientY: 65 })
     assert.deepEqual(moved, expected)
+  }
+})
+
+test('top and bottom snapping preserve the horizontal drop position in both shapes', async () => {
+  for (const [position, release, collapsed, height, expected] of [
+    [{ x: 100, y: 100 }, [172, 24], true, 38, { x: 172, y: 0, edge: 'top' }],
+    [{ x: 100, y: 100 }, [172, 738], true, 38, { x: 172, y: 762, edge: 'bottom' }],
+    [{ x: 100, y: 100 }, [172, 24], false, 200, { x: 172, y: 0, edge: 'top' }],
+    [{ x: 100, y: 100 }, [172, 576], false, 200, { x: 172, y: 600, edge: 'bottom' }],
+    [{ x: 100, y: 600, edge: 'bottom' }, [172, 575], false, 200, { x: 172, y: 575 }],
+    [{ x: 100, y: 600, edge: 'bottom' }, [172, 12], false, 200, { x: 172, y: 0, edge: 'top' }],
+    [{ x: 100, y: 100 }, [21, 16], false, 200, { x: 21, y: 0, edge: 'top' }],
+    [{ x: 100, y: 100 }, [8, 16], false, 200, { x: 0, y: 16, edge: 'left' }],
+    [{ x: 100, y: 0, edge: 'top' }, [16, 16], true, 38, { x: 16, y: 0, edge: 'top' }],
+    [{ x: 100, y: 8 }, [172, 4], false, 784, { x: 172, y: 0, edge: 'top' }],
+    [{ x: 100, y: 8 }, [172, 8], false, 784, { x: 172, y: 8 }],
+    [{ x: 100, y: 8 }, [172, 12], false, 784, { x: 172, y: 16, edge: 'bottom' }],
+  ]) {
+    const { render } = await mountFloating({
+      async floatingPreferences() { return { ok: true, value: { enabled: true, position, items: { apiCost: true } } } },
+    })
+    const shell = render()
+    let moved
+    const frame = shell.type({ ...shell.props, collapsed, onMove: point => { moved = { ...point } } })
+    frame.props.ref.current = { getBoundingClientRect: () => ({ left: position.x, top: position.y, width: 250, height }) }
+    const handle = frame.children.find(node => node.props?.onPointerDown).props
+    const pointer = { button: 0, pointerId: 1, clientX: position.x + 15, clientY: position.y + 10,
+      currentTarget: { setPointerCapture() {} } }
+    handle.onPointerDown(pointer)
+    handle.onPointerUp({ ...pointer, clientX: release[0] + 15, clientY: release[1] + 10 })
+    assert.deepEqual(moved, expected, `Released at ${release} from ${position.edge ?? 'free placement'}`)
+  }
+})
+
+test('arrow keys can move along the top or bottom or pull away from that edge', async () => {
+  for (const [position, outward, inward, detachedY] of [
+    [{ x: 150, y: 0, edge: 'top' }, 'ArrowUp', 'ArrowDown', 20],
+    [{ x: 150, y: 600, edge: 'bottom' }, 'ArrowDown', 'ArrowUp', 580],
+  ]) {
+    const { render } = await mountFloating({
+      async floatingPreferences() { return { ok: true, value: { enabled: true, position, items: { apiCost: true } } } },
+    })
+    const shell = render()
+    const moves = []
+    const frame = shell.type({ ...shell.props, onMove: point => moves.push({ ...point }) })
+    frame.props.ref.current = { getBoundingClientRect: () => ({ left: 150, top: position.y, width: 250, height: 200 }) }
+    const handle = frame.children.find(node => node.props?.onKeyDown).props
+    for (const key of [outward, 'ArrowRight', inward]) handle.onKeyDown({ key, preventDefault() {} })
+    assert.deepEqual(moves, [{ ...position, x: 170 }, { x: 150, y: detachedY }])
   }
 })
 
@@ -311,15 +361,18 @@ test('the floating window exposes only its current view to accessibility tools',
     },
   })
   const shell = render()
-  for (const [collapsed, edge] of [[false, undefined], [true, undefined], [false, 'left'], [true, 'left'], [true, 'right']]) {
+  for (const [collapsed, edge, expectedPortrait] of [
+    [false, undefined], [true, undefined], [false, 'left'], [true, 'left', 'left'], [true, 'right', 'right'],
+    [false, 'top'], [true, 'top'], [false, 'bottom'], [true, 'bottom'],
+  ]) {
     const position = edge ? { x: 0, y: 20, edge } : null
     const window = shell.type({ ...shell.props, collapsed, position })
     const summary = window.children.find(node => node.props?.className?.endsWith(' codex-float-summary'))
     const portrait = window.children.find(node => node.props?.className?.endsWith(' codex-float-portrait'))
     const details = window.children.find(node => node.props?.className?.endsWith(' codex-float-details'))
-    assert.equal(window.props['data-portrait'], collapsed ? edge : undefined)
-    assert.equal(summary.props['aria-hidden'], collapsed && !edge ? undefined : true)
-    assert.equal(portrait?.props['aria-hidden'], collapsed && edge ? undefined : true)
+    assert.equal(window.props['data-portrait'], expectedPortrait)
+    assert.equal(summary.props['aria-hidden'], collapsed && !expectedPortrait ? undefined : true)
+    assert.equal(portrait?.props['aria-hidden'], expectedPortrait ? undefined : true)
     assert.equal(details.props['aria-hidden'], collapsed ? true : undefined)
   }
 })
@@ -460,7 +513,7 @@ test('the entire title bar toggles with a click but not after a drag', async () 
   const onToggle = () => { toggles++ }
   const onMove = () => { moves++ }
   const view = shell.type({ ...shell.props, onToggle, onMove })
-  view.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40 }) }
+  view.props.ref.current = { getBoundingClientRect: () => ({ left: 30, top: 40, width: 250, height: 200 }) }
   const bar = view.children.find(node => node.props?.onPointerDown)
   assert.equal(bar.type, 'button')
   assert.equal(bar.props['aria-expanded'], true)

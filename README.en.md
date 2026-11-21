@@ -6,7 +6,7 @@ Use Codex models from your ChatGPT subscription in DeepSeek Harness Desktop `0.2
 
 ## Installation and sign-in on Windows
 
-1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.7.tgz`, which contains the plugin source and client bundle.
+1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.8.tgz`, which contains the plugin source and client bundle.
 2. In DSH Desktop, open **Plugins → Add plugin** and select the local `.tgz` file. You can also use the Desktop CLI and run `dsh plugin --profile desktop add <absolute-path-to-tgz>`.
 3. Open **Settings → ChatGPT Codex** and select **Sign in with a device code** (使用设备码登录). Copy the code, select **Open the OpenAI verification page** (打开 OpenAI 验证页面), then enter the code and authorize sign-in in your browser.
 4. In the conversation's model picker, select a model and reasoning level from the **ChatGPT Codex** group.
@@ -29,7 +29,7 @@ Once signed in, the account card in **Settings → ChatGPT Codex** shows your em
 - **Codex usage** (Codex 额度) shows the remaining percentage and reset time for each usage window. The expanded and collapsed overlay share a reading that refreshes about once per minute. Cached readings are labeled **Last recorded** (上次).
 - **API price estimate** (API 标价估算) applies OpenAI's published standard API rates to token usage by model. It shows an estimate for the current conversation and a cumulative estimate for this Desktop profile. The estimate covers ChatGPT Codex subscription requests. Usage inherited by a fork is counted in the original conversation. When records or prices are missing, the display shows the subtotal for priced requests. The plugin refreshes and caches the rates automatically. [OpenAI standard API pricing](https://developers.openai.com/api/docs/pricing)
 
-Click the title bar to collapse or expand the overlay, or drag it to move the overlay. Both the expanded panel and the collapsed pill glide to the left or right edge when released nearby. Click the title bar while docked to switch between the vertical pill and the details panel, or drag away from the edge to place it freely. You can reset its position in Settings. Your selections and position are saved when you close the overlay or upgrade the plugin.
+Click the title bar to collapse or expand the overlay, or drag it to move the overlay. Both the expanded panel and the collapsed pill glide to any of the four edges when released nearby. The pill is vertical on the left or right and horizontal at the top or bottom. While docked, the details panel expands inward from its edge. Drag away from the edge to place it freely. You can reset its position in Settings. Your selections and position are saved when you close the overlay or upgrade the plugin.
 
 Release the collapsed pill near the left or right edge to slide it into a vertical dock. Click the docked pill to expand it toward the center of the window. Drag it away from the edge and release it to return to the horizontal layout.
 

@@ -2,7 +2,7 @@ const coordinate = value => typeof value === 'number' && Number.isFinite(value) 
 
 function normalize(value) {
   const point = value?.position
-  const edge = point?.edge === 'left' || point?.edge === 'right' ? { edge: point.edge } : {}
+  const edge = ['left', 'right', 'top', 'bottom'].includes(point?.edge) ? { edge: point.edge } : {}
   return Object.freeze({
     enabled: value?.enabled === true,
     position: coordinate(point?.x) && coordinate(point?.y) ? Object.freeze({ x: point.x, y: point.y, ...edge }) : null,
