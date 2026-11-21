@@ -21,6 +21,7 @@ async function collect(stream) {
 test('catalog is unavailable before sign-in and uses the native Codex model identifiers afterward', async () => {
   let status = 'signed-out'
   const adapter = createCodexAdapter({ credentials: { status: async () => status } })
+  assert.deepEqual(adapter.providerInfo(PROVIDER), { id: 'codex-responses', name: 'ChatGPT Subscription' })
   assert.deepEqual(await adapter.listModels(PROVIDER), [])
   status = 'signed-in'
   const models = await adapter.listModels(PROVIDER)

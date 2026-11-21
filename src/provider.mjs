@@ -5,7 +5,7 @@ import { CodexAuthError } from './auth.mjs'
 import { createModelCatalog } from './model-catalog.mjs'
 
 export const PROVIDER = 'codex-responses'
-export const DISPLAY_NAME = 'ChatGPT Codex'
+export const DISPLAY_NAME = 'ChatGPT Subscription'
 const baseURL = 'https://chatgpt.com/backend-api'
 const responsesURL = `${baseURL}/codex/responses`
 

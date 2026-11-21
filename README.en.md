@@ -6,10 +6,10 @@ Use Codex models from your ChatGPT subscription in DeepSeek Harness Desktop `0.2
 
 ## Installation and sign-in on Windows
 
-1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.8.tgz`, which contains the plugin source and client bundle.
+1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.9.tgz`, which contains the plugin source and client bundle.
 2. In DSH Desktop, open **Plugins → Add plugin** and select the local `.tgz` file. You can also use the Desktop CLI and run `dsh plugin --profile desktop add <absolute-path-to-tgz>`.
 3. Open **Settings → ChatGPT Codex** and select **Sign in with a device code** (使用设备码登录). Copy the code, select **Open the OpenAI verification page** (打开 OpenAI 验证页面), then enter the code and authorize sign-in in your browser.
-4. In the conversation's model picker, select a model and reasoning level from the **ChatGPT Codex** group.
+4. In the conversation's model picker, select a model and reasoning level from the **ChatGPT Subscription** group.
 
 After sign-in, the plugin refreshes the Codex model catalog about every five minutes. **Settings → ChatGPT Codex** shows the model count and identifies the active catalog. It can use the live catalog, the latest catalog saved for the current account, or the built-in catalog.
 

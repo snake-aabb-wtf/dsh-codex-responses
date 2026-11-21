@@ -3,6 +3,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
   const { z } = require('zod')
   const packageName = 'dsh-codex-responses'
   const namespace = 'codexResponses'
+  const subscriptionName = 'ChatGPT Subscription'
   const deviceURL = 'https://auth.openai.com/codex/device'
   const authStatus = z.enum(['signed-in', 'signed-out', 'relogin-required'])
   const statusSchema = z.strictObject({ type: z.literal('status'), status: authStatus,
@@ -700,7 +701,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
       } else onMove(destination)
     }
 
-    return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': 'ChatGPT Subscription',
+    return element('aside', { className: 'dsh-codex-float', ref: frame, 'aria-label': subscriptionName,
       'data-collapsed': collapsed || undefined, 'data-positioned': !!point || undefined, 'data-edge': preview ? undefined : position?.edge,
       'data-portrait': portrait,
       style: point ? { '--codex-float-x': `${preview ? point.x : Math.max(8, point.x)}px`,
@@ -713,7 +714,7 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
         onKeyDown: moveByKey, onPointerDown: startDrag, onPointerMove: move, onPointerUp: e => finishDrag(e, true),
         onPointerCancel: e => finishDrag(e, false), onLostPointerCapture: e => finishDrag(e, false) },
         element('span', { className: 'codex-float-grip', 'aria-hidden': 'true' }, '⠿'),
-        element('span', { className: 'codex-float-title', 'aria-hidden': 'true' }, 'ChatGPT Subscription'),
+        element('span', { className: 'codex-float-title', 'aria-hidden': 'true' }, subscriptionName),
         element('span', { className: 'codex-float-cue', 'aria-hidden': 'true' }, collapsed ? null : '−'),
       ),
       element('div', { className: 'codex-float-view codex-float-summary', 'aria-hidden': !horizontal || undefined, ref: summaryView },
@@ -1050,14 +1051,14 @@ window.__ModuleLoader__.load({ id: 'dsh-codex-responses', factory: require => {
     const statusText = device ? '等待浏览器授权' : progressLabels[operation] ?? labels[status] ?? '状态未知'
     const tone = busy ? undefined : signedIn ? 'connected' : error || status === 'relogin-required' ? 'attention' : undefined
 
-    return element('section', { className: 'dsh-codex-settings', 'aria-label': 'ChatGPT Codex 连接设置' },
+    return element('section', { className: 'dsh-codex-settings', 'aria-label': `${subscriptionName} 连接设置` },
       element('style', null, styles),
       element('div', { className: 'codex-card' },
         element('header', { className: 'codex-head' },
           element('div', { className: 'codex-intro' },
-            element('h3', null, 'ChatGPT Codex'),
+            element('h3', null, subscriptionName),
             element('p', { className: 'codex-description' }, signedIn
-              ? '在会话的模型选择器中选择「ChatGPT Codex」分组。' : '用 ChatGPT 订阅连接 Codex 模型。'),
+              ? `在会话的模型选择器中选择「${subscriptionName}」分组。` : '用 ChatGPT 订阅连接 Codex 模型。'),
           ),
           element('span', { className: 'codex-status', role: 'status', 'data-tone': tone }, statusText),
         ),

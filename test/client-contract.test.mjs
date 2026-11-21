@@ -597,6 +597,12 @@ async function mountPanel(api, clipboard) {
 const verificationURL = 'https://auth.openai.com/codex/device'
 const syntheticCode = 'TEST-1234'
 
+test('the account card names the ChatGPT Subscription model group', async () => {
+  const panel = await mountPanel({ status: async () => status('signed-in') })
+  assert.ok(panel.find('h3', 'ChatGPT Subscription'))
+  assert.ok(panel.find('p', '在会话的模型选择器中选择「ChatGPT Subscription」分组。'))
+})
+
 function deviceLogin() {
   return {
     status: async () => status('signed-out'),
