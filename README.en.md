@@ -6,12 +6,12 @@ Use Codex models from your ChatGPT subscription in DeepSeek Harness Desktop `0.2
 
 ## Installation and sign-in on Windows
 
-1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.10.tgz`, which contains the plugin source and client bundle.
+1. Run `npm pack` from this directory to create `dsh-codex-responses-0.5.11.tgz`, which contains the plugin source and client bundle.
 2. In DSH Desktop, open **Plugins → Add plugin** and select the local `.tgz` file. You can also use the Desktop CLI and run `dsh plugin --profile desktop add <absolute-path-to-tgz>`.
-3. Open **Settings → ChatGPT Subscription** and select **Sign in with a device code** (使用设备码登录). Copy the code, select **Open the OpenAI verification page** (打开 OpenAI 验证页面), then enter the code and authorize sign-in in your browser.
+3. Open **Settings → ChatGPT** and select **Sign in with a device code** (使用设备码登录). Copy the code, select **Open the OpenAI verification page** (打开 OpenAI 验证页面), then enter the code and authorize sign-in in your browser.
 4. In the conversation's model picker, select a model and reasoning level from the **ChatGPT Subscription** group.
 
-After sign-in, the plugin refreshes the Codex model catalog about every five minutes. **Settings → ChatGPT Subscription** shows the model count and identifies the active catalog. It can use the live catalog, the latest catalog saved for the current account, or the built-in catalog.
+After sign-in, the plugin refreshes the Codex model catalog about every five minutes. **Settings → ChatGPT** shows the model count and identifies the active catalog. It can use the live catalog, the latest catalog saved for the current account, or the built-in catalog.
 
 ## Generate images with your Codex subscription
 
@@ -23,7 +23,7 @@ DSH passes each generated or edited image to the selected vision model in the sa
 
 ## Overlay and API price estimates
 
-Once signed in, the account card in **Settings → ChatGPT Subscription** shows your email, plan, usage, remaining allowance, and reset times. On the same page, enable **Overlay** (悬浮窗) and select what to show under **Display content** (显示内容). The overlay starts off, with the API price estimate selected by default.
+Once signed in, the account card in **Settings → ChatGPT** shows your email, plan, usage, remaining allowance, and reset times. On the same page, enable **Overlay** (悬浮窗) and select what to show under **Display content** (显示内容). The overlay starts off, with the API price estimate selected by default.
 
 - **Account and plan** (账号与套餐) shows your email and plan name.
 - **Codex usage** (Codex 额度) shows the remaining percentage and reset time for each usage window. The expanded and collapsed overlay share a reading that refreshes about once per minute. Cached readings are labeled **Last recorded** (上次).
@@ -37,7 +37,7 @@ Release the collapsed pill near the left or right edge to slide it into a vertic
 
 The DSH credential service stores the plugin's OAuth grant under the key `dsh-codex/codex-responses`. The default storage path is `$DSH_HOME/.credentials.yaml`.
 
-To uninstall, select **Sign out** (退出登录) in **Settings → ChatGPT Subscription** to clear the plugin credentials, then uninstall the plugin from the **Plugins** page.
+To uninstall, select **Sign out** (退出登录) in **Settings → ChatGPT** to clear the plugin credentials, then uninstall the plugin from the **Plugins** page.
 
 ## Development checks
 
